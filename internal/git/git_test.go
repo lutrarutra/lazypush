@@ -20,7 +20,7 @@ func initTempRepo(t *testing.T) string {
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0644); err != nil {
-		t.Fatalf("write file: %v", err)
+		t.Fatalf("write file yes: %v", err)
 	}
 
 	wt, err := r.Worktree()

@@ -148,7 +148,13 @@ func (r *Repo) Tag(name string) error {
 		return fmt.Errorf("get HEAD: %w", err)
 	}
 
-	_, err = r.repo.CreateTag(name, ref.Hash(), nil)
+	_, err = r.repo.CreateTag(name, ref.Hash(), &gogit.CreateTagOptions{
+		Message: name,
+		Tagger: &object.Signature{
+			Name:  "lazypush",
+			Email: "lazypush@local",
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("create tag %s: %w", name, err)
 	}
