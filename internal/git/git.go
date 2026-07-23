@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/lutrarutra/lazypush/internal/version"
@@ -163,42 +162,16 @@ func (r *Repo) DeleteTag(name string) error {
 	return nil
 }
 
-func (r *Repo) HasRemote(name string) bool {
-	_, err := r.repo.Remote(name)
-	return err == nil
-}
-
 func (r *Repo) Push(remote string) error {
-	if !r.HasRemote(remote) {
-		return fmt.Errorf("remote %q not found — push manually with: git push --set-upstream %s <branch>", remote, remote)
-	}
+	// Use git push CLI — handles auth, worktrees, and upstream correctly
+	cmd := exec.Command("git", "push", "--follow-tags", remote, "HEAD")
+	cmd.Dir = r.path
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-	// Push with explicit refspec to handle branches without upstream
-	ref, err := r.repo.Head()
-	if err != nil {
-		return fmt.Errorf("get HEAD: %w", err)
-	}
-
-	if ref.Name().IsBranch() {
-		branchName := ref.Name().String()
-		err = r.repo.Push(&gogit.PushOptions{
-			RemoteName: remote,
-			RefSpecs:   []config.RefSpec{config.RefSpec(branchName + ":" + branchName)},
-			FollowTags: true,
-		})
-		if err != nil {
-			return fmt.Errorf("push: %w", err)
-		}
-		return nil
-	}
-
-	// Detached HEAD — use default push
-	err = r.repo.Push(&gogit.PushOptions{
-		RemoteName: remote,
-		FollowTags: true,
-	})
-	if err != nil {
-		return fmt.Errorf("push: %w", err)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git push failed: %w\n%s", err, stderr.String())
 	}
 	return nil
 }
