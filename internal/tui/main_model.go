@@ -229,10 +229,21 @@ func (m *Model) executeOperations() tea.Cmd {
 			return progressStepDone{index: 0, ok: false, message: err.Error()}
 		}
 
-		err = m.repo.Tag(m.versionTag)
-		if err != nil {
-			return progressStepDone{index: 1, ok: false, message: err.Error()}
+		if m.version.reTag {
+			// Delete old tag, recreate at new HEAD
+			_ = m.repo.DeleteTag(m.versionTag)
+			err = m.repo.Tag(m.versionTag)
+			if err != nil {
+				return progressStepDone{index: 1, ok: false, message: err.Error()}
+			}
+		} else if m.versionTag != m.version.currentTag {
+			// New version — create tag
+			err = m.repo.Tag(m.versionTag)
+			if err != nil {
+				return progressStepDone{index: 1, ok: false, message: err.Error()}
+			}
 		}
+		// If Keep + no re-tag: skip tagging entirely
 
 		err = m.repo.Push("origin")
 		if err != nil {

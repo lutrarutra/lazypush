@@ -173,6 +173,13 @@ func (r *Repo) Tag(name string) error {
 	return nil
 }
 
+func (r *Repo) DeleteTag(name string) error {
+	if err := r.repo.DeleteTag(name); err != nil {
+		return fmt.Errorf("delete tag %s: %w", name, err)
+	}
+	return nil
+}
+
 func (r *Repo) Push(remote string) error {
 	err := r.repo.Push(&gogit.PushOptions{
 		RemoteName: remote,

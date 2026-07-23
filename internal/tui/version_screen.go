@@ -16,6 +16,8 @@ type versionScreenModel struct {
 	customInput   textinput.Model
 	showCustom    bool
 	confirmLLM    bool
+	confirmReTag  bool
+	reTag         bool
 	done          bool
 	chosenVersion string
 	useLLM        bool
@@ -76,6 +78,25 @@ func (m versionScreenModel) Update(msg tea.Msg) (versionScreenModel, tea.Cmd) {
 			}
 		}
 
+		if m.confirmReTag {
+			switch msg.String() {
+			case "y", "Y":
+				m.reTag = true
+				m.confirmReTag = false
+				m.confirmLLM = true
+				return m, nil
+			case "n", "N":
+				m.reTag = false
+				m.confirmReTag = false
+				m.confirmLLM = true
+				return m, nil
+			case "esc":
+				m.confirmReTag = false
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.confirmLLM {
 			switch msg.String() {
 			case "y", "Y":
@@ -109,7 +130,12 @@ func (m versionScreenModel) Update(msg tea.Msg) (versionScreenModel, tea.Cmd) {
 				return m, nil
 			}
 			m.chosenVersion = m.currentTag
+			m.reTag = false
 			switch m.selected {
+			case 0:
+				// Keep — ask about moving the tag
+				m.confirmReTag = true
+				return m, nil
 			case 1:
 				v, _ := version.Parse(m.currentTag)
 				m.chosenVersion = v.Bump(version.Patch).String()
@@ -120,7 +146,9 @@ func (m versionScreenModel) Update(msg tea.Msg) (versionScreenModel, tea.Cmd) {
 				v, _ := version.Parse(m.currentTag)
 				m.chosenVersion = v.Bump(version.Major).String()
 			}
-			m.confirmLLM = true
+			if m.selected != 0 {
+				m.confirmLLM = true
+			}
 			return m, nil
 		case "esc":
 			m.chosenVersion = ""
@@ -135,6 +163,14 @@ func (m versionScreenModel) Update(msg tea.Msg) (versionScreenModel, tea.Cmd) {
 func (m versionScreenModel) View() string {
 	if m.currentTag == "" {
 		m.currentTag = "v0.0.0"
+	}
+
+	if m.confirmReTag {
+		var s string
+		s += lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("🏷️  Version: %s (existing tag)", m.chosenVersion)) + "\n\n"
+		s += fmt.Sprintf("Move existing tag %s to current commit? (y/N)\n", m.chosenVersion)
+		s += "\nEsc to go back\n"
+		return s
 	}
 
 	if m.confirmLLM {
