@@ -17,6 +17,7 @@ type versionScreenModel struct {
 	showCustom    bool
 	done          bool
 	chosenVersion string
+	useLLM        bool
 }
 
 func newVersionScreen(currentTag string) versionScreenModel {
@@ -32,6 +33,7 @@ func newVersionScreen(currentTag string) versionScreenModel {
 		fmt.Sprintf("Bump Minor (%s)", base.Bump(version.Minor).String()),
 		fmt.Sprintf("Bump Major (%s)", base.Bump(version.Major).String()),
 		"Custom",
+		"Write Message Manually",
 	}
 
 	ci := textinput.New()
@@ -41,9 +43,10 @@ func newVersionScreen(currentTag string) versionScreenModel {
 	return versionScreenModel{
 		currentTag:  currentTag,
 		choices:     choices,
-		selected:    1, // default to patch bump
+		selected:    1,
 		customInput: ci,
 		showCustom:  false,
+		useLLM:      true,
 	}
 }
 
@@ -58,6 +61,7 @@ func (m versionScreenModel) Update(msg tea.Msg) (versionScreenModel, tea.Cmd) {
 			switch msg.String() {
 			case "enter":
 				m.chosenVersion = m.customInput.Value()
+				m.useLLM = true
 				m.done = true
 				return m, nil
 			case "esc":
@@ -80,11 +84,13 @@ func (m versionScreenModel) Update(msg tea.Msg) (versionScreenModel, tea.Cmd) {
 				m.selected++
 			}
 		case "enter":
-			if m.selected == len(m.choices)-1 {
+			if m.selected == 4 {
 				m.showCustom = true
 				m.customInput.Focus()
 				return m, nil
 			}
+
+			m.useLLM = true
 			switch m.selected {
 			case 0:
 				m.chosenVersion = m.currentTag
@@ -97,6 +103,10 @@ func (m versionScreenModel) Update(msg tea.Msg) (versionScreenModel, tea.Cmd) {
 			case 3:
 				v, _ := version.Parse(m.currentTag)
 				m.chosenVersion = v.Bump(version.Major).String()
+			case 5:
+				v, _ := version.Parse(m.currentTag)
+				m.chosenVersion = v.Bump(version.Patch).String()
+				m.useLLM = false
 			}
 			m.done = true
 			return m, nil

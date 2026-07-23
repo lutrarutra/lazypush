@@ -18,16 +18,18 @@ type screen int
 const (
 	screenLogin screen = iota
 	screenVersion
+	screenLoading
 	screenReview
 	screenProgress
 )
 
 type Model struct {
-	screen    screen
-	login     loginScreenModel
-	version   versionScreenModel
-	review    reviewScreenModel
-	progress  progressScreenModel
+	screen   screen
+	login    loginScreenModel
+	version  versionScreenModel
+	loading  loadingScreenModel
+	review   reviewScreenModel
+	progress progressScreenModel
 
 	config    *config.Config
 	repo      *git.Repo
@@ -96,6 +98,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateLogin(msg)
 	case screenVersion:
 		return m.updateVersion(msg)
+	case screenLoading:
+		return m.updateLoading(msg)
 	case screenReview:
 		return m.updateReview(msg)
 	case screenProgress:
@@ -131,6 +135,35 @@ func (m *Model) updateLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateVersion(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	m.version, cmd = m.version.Update(msg)
+
+	if m.version.done {
+		if m.version.chosenVersion == "" {
+			return m, tea.Quit
+		}
+		m.versionTag = m.version.chosenVersion
+
+		if m.version.useLLM {
+			m.loading = newLoadingScreen("Generating commit message...")
+			m.screen = screenLoading
+			return m, m.generateCommitMessage()
+		}
+
+		// Write manually — go to review with an empty message
+		diff, err := m.repo.Diff()
+		if err != nil {
+			diff = ""
+		}
+		m.review = newReviewScreen(diff, "")
+		m.screen = screenReview
+		return m, nil
+	}
+
+	return m, cmd
+}
+
+func (m *Model) updateLoading(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case commitMessageReadyMsg:
 		m.review = newReviewScreen(msg.diff, msg.message)
@@ -142,16 +175,7 @@ func (m *Model) updateVersion(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	m.version, cmd = m.version.Update(msg)
-
-	if m.version.done {
-		if m.version.chosenVersion == "" {
-			return m, tea.Quit
-		}
-		m.versionTag = m.version.chosenVersion
-		return m, m.generateCommitMessage()
-	}
-
+	m.loading, cmd = m.loading.Update(msg)
 	return m, cmd
 }
 
@@ -177,16 +201,6 @@ func (m *Model) generateCommitMessage() tea.Cmd {
 }
 
 func (m *Model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case commitMessageReadyMsg:
-		m.review = newReviewScreen(msg.diff, msg.message)
-		m.screen = screenReview
-		return m, nil
-	case errMsg:
-		m.err = fmt.Errorf("%s", msg.err)
-		return m, tea.Quit
-	}
-
 	var cmd tea.Cmd
 	m.review, cmd = m.review.Update(msg)
 
@@ -254,6 +268,8 @@ func (m *Model) View() string {
 		return m.login.View()
 	case screenVersion:
 		return m.version.View()
+	case screenLoading:
+		return m.loading.View()
 	case screenReview:
 		return m.review.View()
 	case screenProgress:
