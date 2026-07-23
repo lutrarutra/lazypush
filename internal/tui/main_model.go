@@ -190,6 +190,11 @@ func (m *Model) generateCommitMessage() tea.Cmd {
 			return errMsg{err: err.Error()}
 		}
 
+		if diff == "" {
+			// No changes — show empty review screen
+			return commitMessageReadyMsg{diff: "", message: ""}
+		}
+
 		sys, user := llm.CommitMessagePrompt(diff)
 		msg, err := m.llmClient.Generate(context.Background(), sys, user)
 		if err != nil {
