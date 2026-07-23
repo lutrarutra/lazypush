@@ -220,57 +220,92 @@ func (m *Model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) executeOperations() tea.Cmd {
+	m.progress = newProgressScreen()
+	m.screen = screenProgress
+	return m.execStep0()
+}
+
+func (m *Model) execStep0() tea.Cmd {
 	return func() tea.Msg {
-		m.progress = newProgressScreen()
-		m.screen = screenProgress
-
 		err := m.repo.Commit(m.review.commitMessage.Value())
-		if err != nil {
-			return progressStepDone{index: 0, ok: false, message: err.Error()}
-		}
+		return execStepResult{step: 0, err: err}
+	}
+}
 
+func (m *Model) execStep1() tea.Cmd {
+	return func() tea.Msg {
+		// Determine if tagging should happen
 		if m.version.reTag {
-			// Delete old tag, recreate at new HEAD
+			// Keep + re-tag: delete old, create new
 			_ = m.repo.DeleteTag(m.versionTag)
-			err = m.repo.Tag(m.versionTag)
-			if err != nil {
-				return progressStepDone{index: 1, ok: false, message: err.Error()}
-			}
-		} else if m.versionTag != m.version.currentTag {
-			// New version — create tag
-			err = m.repo.Tag(m.versionTag)
-			if err != nil {
-				return progressStepDone{index: 1, ok: false, message: err.Error()}
-			}
+			err := m.repo.Tag(m.versionTag)
+			return execStepResult{step: 1, err: err}
 		}
-		// If Keep + no re-tag: skip tagging entirely
-
-		err = m.repo.Push("origin")
-		if err != nil {
-			return progressStepDone{index: 2, ok: false, message: err.Error()}
+		if m.versionTag != m.version.currentTag {
+			// New version: create tag
+			err := m.repo.Tag(m.versionTag)
+			return execStepResult{step: 1, err: err}
 		}
+		// Keep + no re-tag: skip tagging
+		return execStepResult{step: 1, err: nil}
+	}
+}
 
+func (m *Model) execStep2() tea.Cmd {
+	return func() tea.Msg {
+		err := m.repo.Push("origin")
+		return execStepResult{step: 2, err: err}
+	}
+}
+
+func (m *Model) execStep3() tea.Cmd {
+	return func() tea.Msg {
 		if m.review.includePR && gh.CheckInstalled() {
 			prURL, err := gh.CreatePR(m.review.commitMessage.Value(), m.review.prDescription.Value())
 			if err != nil {
-				return progressStepDone{index: 3, ok: false, message: err.Error()}
+				return execStepResult{step: 3, err: err}
 			}
 			m.prURL = prURL
 		}
-
-		return progressStepDone{index: 3, ok: true, message: m.prURL}
+		return execStepResult{step: 3, err: nil}
 	}
 }
 
 func (m *Model) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case progressStepDone:
-		var cmd tea.Cmd
-		m.progress, cmd = m.progress.Update(msg)
-		if m.progress.done {
-			return m, tea.Quit
+	case execStepResult:
+		ok := msg.err == nil
+		msgStr := ""
+		if msg.err != nil {
+			msgStr = msg.err.Error()
 		}
-		return m, cmd
+
+		m.progress, _ = m.progress.Update(progressStepDone{
+			index:   msg.step,
+			ok:      ok,
+			message: msgStr,
+		})
+
+		if !ok {
+			return m, nil // keep showing final failed state
+		}
+		if m.progress.done {
+			return m, nil // keep showing final success state
+		}
+
+		// Chain to next step
+		switch msg.step + 1 {
+		case 1:
+			return m, m.execStep1()
+		case 2:
+			return m, m.execStep2()
+		case 3:
+			return m, m.execStep3()
+		case 4:
+			// All done — keep showing final state
+			return m, nil
+		}
+		return m, nil
 	}
 
 	var cmd tea.Cmd
@@ -301,4 +336,9 @@ type commitMessageReadyMsg struct {
 
 type errMsg struct {
 	err string
+}
+
+type execStepResult struct {
+	step int
+	err  error
 }
