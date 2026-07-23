@@ -1,7 +1,19 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lutrarutra/lazypush/internal/tui"
+)
 
 func main() {
-	fmt.Println("lazypush — interactive commit & release tool")
+	model := tui.NewModel()
+	p := tea.NewProgram(model)
+
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }
