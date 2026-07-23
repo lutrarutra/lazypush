@@ -24,6 +24,9 @@ profile.cov
 go.work
 go.work.sum
 
+# Worktree isolation
+.worktrees/
+
 # env file
 .env
 
