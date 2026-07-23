@@ -34,6 +34,7 @@ func newReviewScreen(diff, commitMessage string) reviewScreenModel {
 	ta.SetHeight(3)
 	ta.ShowLineNumbers = false
 	ta.Prompt = ""
+	ta.Focus()
 
 	pr := textarea.New()
 	pr.SetValue(commitMessage)

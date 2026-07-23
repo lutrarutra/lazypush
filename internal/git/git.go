@@ -209,8 +209,12 @@ func resolveGitDir(path string) (string, error) {
 	}
 
 	for {
-		if fi, err := os.Stat(filepathJoin(dir, ".git")); err == nil && fi.IsDir() {
-			return dir, nil
+		gitPath := filepathJoin(dir, ".git")
+		if fi, err := os.Stat(gitPath); err == nil {
+			// .git is a directory (normal repo) or a file (worktree/submodule)
+			if fi.IsDir() || fi.Mode().IsRegular() {
+				return dir, nil
+			}
 		}
 		parent := filepathDir(dir)
 		if parent == dir {
