@@ -77,7 +77,7 @@ func (m loginScreenModel) Update(msg tea.Msg) (loginScreenModel, tea.Cmd) {
 
 func (m loginScreenModel) View() string {
 	var s string
-	s += lipgloss.NewStyle().Bold(true).Render("⚙️  lazypush Settings\n\n")
+	s += lipgloss.NewStyle().Bold(true).Render("⚙️  lazypush Settings") + "\n\n"
 	for i := range m.inputs {
 		s += m.inputs[i].View()
 		s += "\n"

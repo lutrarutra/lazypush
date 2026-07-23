@@ -21,21 +21,26 @@ type reviewScreenModel struct {
 }
 
 func newReviewScreen(diff, commitMessage string) reviewScreenModel {
-	vp := viewport.New(80, 20)
-	vp.SetContent(diff)
+	vp := viewport.New(80, 10)
+	if diff == "" {
+		vp.SetContent(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("(no changes detected)"))
+	} else {
+		vp.SetContent(diff)
+	}
 
 	ta := textarea.New()
 	ta.SetValue(commitMessage)
 	ta.SetWidth(80)
-	ta.SetHeight(5)
-	ta.Prompt = "Commit message: "
-	ta.Focus()
+	ta.SetHeight(3)
+	ta.ShowLineNumbers = false
+	ta.Prompt = ""
 
 	pr := textarea.New()
 	pr.SetValue(commitMessage)
 	pr.SetWidth(80)
-	pr.SetHeight(8)
-	pr.Prompt = "PR description: "
+	pr.SetHeight(5)
+	pr.ShowLineNumbers = false
+	pr.Prompt = ""
 
 	return reviewScreenModel{
 		diff:          diff,
@@ -93,24 +98,30 @@ func (m reviewScreenModel) Update(msg tea.Msg) (reviewScreenModel, tea.Cmd) {
 func (m reviewScreenModel) View() string {
 	var s strings.Builder
 
-	s.WriteString(lipgloss.NewStyle().Bold(true).Render("📝 Review Changes\n\n"))
+	s.WriteString(lipgloss.NewStyle().Bold(true).Render("📝 Review Changes"))
+	s.WriteString("\n\n")
 
-	s.WriteString(lipgloss.NewStyle().Bold(true).Render("Diff:\n"))
+	s.WriteString(lipgloss.NewStyle().Bold(true).Render("Diff:"))
+	s.WriteString("\n")
 	s.WriteString(m.viewport.View())
 	s.WriteString("\n\n")
 
-	s.WriteString(lipgloss.NewStyle().Bold(true).Render("Commit Message:\n"))
+	s.WriteString(lipgloss.NewStyle().Bold(true).Render("Commit Message:"))
+	s.WriteString("\n")
 	s.WriteString(m.commitMessage.View())
 	s.WriteString("\n")
 
 	if m.showPR {
-		s.WriteString(lipgloss.NewStyle().Bold(true).Render("PR Description:\n"))
+		s.WriteString(lipgloss.NewStyle().Bold(true).Render("PR Description:"))
+		s.WriteString("\n")
 		s.WriteString(m.prDescription.View())
 		s.WriteString("\n")
 	}
 
 	s.WriteString("\n")
-	s.WriteString(lipgloss.NewStyle().Faint(true).Render("Ctrl+s: Commit  Ctrl+p: Commit + PR  Ctrl+e: Toggle PR  Ctrl+c: Cancel  Tab: switch fields\n"))
+	s.WriteString(lipgloss.NewStyle().Faint(true).Render("Ctrl+s: Commit  Ctrl+p: Commit + PR  Ctrl+e: Toggle PR  Ctrl+c: Cancel  Tab: switch fields"))
 
 	return s.String()
 }
+
+

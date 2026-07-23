@@ -33,5 +33,5 @@ func (m loadingScreenModel) Update(msg tea.Msg) (loadingScreenModel, tea.Cmd) {
 }
 
 func (m loadingScreenModel) View() string {
-	return lipgloss.NewStyle().Bold(true).Render("\n  "+m.spinner.View()+" "+m.label+"\n")
+	return "\n" + lipgloss.NewStyle().Bold(true).Render("  "+m.spinner.View()+" "+m.label) + "\n"
 }

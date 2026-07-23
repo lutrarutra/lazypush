@@ -65,7 +65,8 @@ func (m progressScreenModel) Update(msg tea.Msg) (progressScreenModel, tea.Cmd) 
 
 func (m progressScreenModel) View() string {
 	var s strings.Builder
-	s.WriteString(lipgloss.NewStyle().Bold(true).Render("🚀 Progress\n\n"))
+	s.WriteString(lipgloss.NewStyle().Bold(true).Render("🚀 Progress"))
+	s.WriteString("\n\n")
 
 	for i, step := range m.steps {
 		if step.done {
