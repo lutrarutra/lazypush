@@ -69,27 +69,9 @@ func (r *Repo) StageAll() error {
 }
 
 func (r *Repo) Diff() (string, error) {
-	status, err := r.worktree.Status()
-	if err != nil {
-		return "", err
-	}
-
-	hasStaged := false
-	for _, s := range status {
-		if s.Staging != gogit.Unmodified {
-			hasStaged = true
-			break
-		}
-	}
-
-	if !hasStaged {
-		if err := r.StageAll(); err != nil {
-			return "", err
-		}
-	}
-
-	// Use git diff --cached via CLI for the diff (read-only, no auth needed)
-	cmd := exec.Command("git", "diff", "--cached")
+	// Use git diff HEAD to compare working tree to HEAD
+	// This bypasses the staging area entirely — no go-git / git index mismatch
+	cmd := exec.Command("git", "diff", "HEAD")
 	cmd.Dir = r.path
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
