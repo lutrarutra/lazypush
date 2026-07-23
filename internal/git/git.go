@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/lutrarutra/lazypush/internal/version"
@@ -163,8 +164,30 @@ func (r *Repo) DeleteTag(name string) error {
 }
 
 func (r *Repo) Push(remote string) error {
-	err := r.repo.Push(&gogit.PushOptions{
+	// Get the current branch ref to push with an explicit refspec
+	// This handles branches without an upstream configured
+	ref, err := r.repo.Head()
+	if err != nil {
+		return fmt.Errorf("get HEAD: %w", err)
+	}
+
+	if ref.Name().IsBranch() {
+		branchName := ref.Name().String() // e.g. "refs/heads/feat/lazypush-rework"
+		err = r.repo.Push(&gogit.PushOptions{
+			RemoteName: remote,
+			RefSpecs:   []config.RefSpec{config.RefSpec(branchName + ":" + branchName)},
+			FollowTags: true,
+		})
+		if err != nil {
+			return fmt.Errorf("push: %w", err)
+		}
+		return nil
+	}
+
+	// Detached HEAD — use default push
+	err = r.repo.Push(&gogit.PushOptions{
 		RemoteName: remote,
+		FollowTags: true,
 	})
 	if err != nil {
 		return fmt.Errorf("push: %w", err)

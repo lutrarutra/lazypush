@@ -45,6 +45,11 @@ func (m progressScreenModel) Init() tea.Cmd {
 
 func (m progressScreenModel) Update(msg tea.Msg) (progressScreenModel, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		if m.done {
+			// Any key quits when finished
+			return m, tea.Quit
+		}
 	case progressStepDone:
 		if msg.index < len(m.steps) {
 			m.steps[msg.index].done = true
