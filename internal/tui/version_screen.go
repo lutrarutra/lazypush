@@ -139,14 +139,14 @@ func (m versionScreenModel) View() string {
 
 	if m.confirmLLM {
 		var s string
-		s += lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("🏷️  Version: %s\n\n", m.chosenVersion))
-		s += "Generate commit message with LLM? (Y/n)  \n"
+		s += lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("🏷️  Version: %s", m.chosenVersion)) + "\n\n"
+		s += "Generate commit message with LLM? (Y/n)\n"
 		s += "\nEsc to go back\n"
 		return s
 	}
 
 	var s string
-	s += lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("🏷️  Current tag: %s\n\n", m.currentTag))
+	s += lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("🏷️  Current tag: %s", m.currentTag)) + "\n\n"
 
 	if m.showCustom {
 		s += m.customInput.View()
@@ -155,11 +155,11 @@ func (m versionScreenModel) View() string {
 	}
 
 	for i, choice := range m.choices {
-		cursor := " "
 		if i == m.selected {
-			cursor = "▸"
+			s += "▸ " + choice + "\n"
+		} else {
+			s += "  " + choice + "\n"
 		}
-		s += fmt.Sprintf("%s %s\n", cursor, choice)
 	}
 
 	s += "\n↑/↓ to navigate, Enter to select, Esc to cancel\n"
