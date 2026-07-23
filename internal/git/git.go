@@ -163,16 +163,24 @@ func (r *Repo) DeleteTag(name string) error {
 	return nil
 }
 
+func (r *Repo) HasRemote(name string) bool {
+	_, err := r.repo.Remote(name)
+	return err == nil
+}
+
 func (r *Repo) Push(remote string) error {
-	// Get the current branch ref to push with an explicit refspec
-	// This handles branches without an upstream configured
+	if !r.HasRemote(remote) {
+		return fmt.Errorf("remote %q not found — push manually with: git push --set-upstream %s <branch>", remote, remote)
+	}
+
+	// Push with explicit refspec to handle branches without upstream
 	ref, err := r.repo.Head()
 	if err != nil {
 		return fmt.Errorf("get HEAD: %w", err)
 	}
 
 	if ref.Name().IsBranch() {
-		branchName := ref.Name().String() // e.g. "refs/heads/feat/lazypush-rework"
+		branchName := ref.Name().String()
 		err = r.repo.Push(&gogit.PushOptions{
 			RemoteName: remote,
 			RefSpecs:   []config.RefSpec{config.RefSpec(branchName + ":" + branchName)},
