@@ -50,7 +50,9 @@ func (m progressScreenModel) Update(msg tea.Msg) (progressScreenModel, tea.Cmd) 
 			m.steps[msg.index].done = true
 			m.steps[msg.index].ok = msg.ok
 			m.steps[msg.index].msg = msg.message
-			m.current = msg.index + 1
+			if msg.ok {
+				m.current = msg.index + 1
+			}
 		}
 		if m.current >= len(m.steps) || !msg.ok {
 			m.done = true
