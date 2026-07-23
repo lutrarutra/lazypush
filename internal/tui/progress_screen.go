@@ -96,6 +96,11 @@ func (m progressScreenModel) View() string {
 		}
 	}
 
+	if m.done {
+		s.WriteString("\n")
+		s.WriteString(lipgloss.NewStyle().Faint(true).Render("Press any key to close"))
+	}
+
 	return s.String()
 }
 
