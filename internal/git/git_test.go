@@ -2,6 +2,7 @@ package git_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -17,6 +18,15 @@ func initTempRepo(t *testing.T) string {
 	r, err := gogit.PlainInit(dir, false)
 	if err != nil {
 		t.Fatalf("git init: %v", err)
+	}
+
+	// Set local git config so userSignature() doesn't fail
+	for _, args := range [][]string{{"config", "user.name", "test"}, {"config", "user.email", "test@test.com"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("git config %v: %v", args, err)
+		}
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0644); err != nil {

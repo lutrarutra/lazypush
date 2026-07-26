@@ -126,17 +126,44 @@ func (r *Repo) LatestTag() (string, error) {
 	return latest.String(), nil
 }
 
+func (r *Repo) gitConfig(key string) string {
+	cmd := exec.Command("git", "config", "--get", key)
+	cmd.Dir = r.path
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(stdout.String())
+}
+
+func (r *Repo) userSignature() (object.Signature, error) {
+	name := r.gitConfig("user.name")
+	if name == "" {
+		return object.Signature{}, fmt.Errorf("git user.name is not set — run: git config --global user.name \"Your Name\"")
+	}
+	email := r.gitConfig("user.email")
+	if email == "" {
+		return object.Signature{}, fmt.Errorf("git user.email is not set — run: git config --global user.email \"you@example.com\"")
+	}
+	return object.Signature{
+		Name:  name,
+		Email: email,
+		When:  time.Now(),
+	}, nil
+}
+
 func (r *Repo) Commit(message string) error {
 	if err := r.StageAll(); err != nil {
 		return fmt.Errorf("stage before commit: %w", err)
 	}
 
-	_, err := r.worktree.Commit(message, &gogit.CommitOptions{
-		Author: &object.Signature{
-			Name:  "lazypush",
-			Email: "lazypush@local",
-			When:  time.Now(),
-		},
+	sig, err := r.userSignature()
+	if err != nil {
+		return err
+	}
+	_, err = r.worktree.Commit(message, &gogit.CommitOptions{
+		Author: &sig,
 	})
 	if err != nil {
 		return fmt.Errorf("commit: %w", err)
@@ -150,12 +177,13 @@ func (r *Repo) Tag(name string) error {
 		return fmt.Errorf("get HEAD: %w", err)
 	}
 
+	sig, err := r.userSignature()
+	if err != nil {
+		return err
+	}
 	_, err = r.repo.CreateTag(name, ref.Hash(), &gogit.CreateTagOptions{
 		Message: name,
-		Tagger: &object.Signature{
-			Name:  "lazypush",
-			Email: "lazypush@local",
-		},
+		Tagger: &sig,
 	})
 	if err != nil {
 		return fmt.Errorf("create tag %s: %w", name, err)
