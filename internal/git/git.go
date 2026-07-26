@@ -70,19 +70,68 @@ func (r *Repo) StageAll() error {
 }
 
 func (r *Repo) Diff() (string, error) {
-	// Use git diff HEAD to compare working tree to HEAD
-	// This bypasses the staging area entirely — no go-git / git index mismatch
-	cmd := exec.Command("git", "diff", "HEAD")
-	cmd.Dir = r.path
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("git diff: %w\nstderr: %s", err, stderr.String())
+	// Diff of tracked files (working tree vs HEAD)
+	var diffBuf bytes.Buffer
+	{
+		cmd := exec.Command("git", "diff", "HEAD")
+		cmd.Dir = r.path
+		cmd.Stdout = &diffBuf
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			return "", fmt.Errorf("git diff: %w\nstderr: %s", err, stderr.String())
+		}
 	}
 
-	return stdout.String(), nil
+	// Also include new untracked files as full additions
+	lsCmd := exec.Command("git", "ls-files", "--others", "--exclude-standard")
+	lsCmd.Dir = r.path
+	var lsOut bytes.Buffer
+	lsCmd.Stdout = &lsOut
+	if err := lsCmd.Run(); err != nil {
+		return diffBuf.String(), nil // best-effort: return partial diff
+	}
+
+	newFiles := strings.TrimSpace(lsOut.String())
+	if newFiles == "" {
+		return diffBuf.String(), nil
+	}
+
+	var b strings.Builder
+	b.WriteString(diffBuf.String())
+	if diffBuf.Len() > 0 && !strings.HasSuffix(diffBuf.String(), "\n") {
+		b.WriteString("\n")
+	}
+
+	for _, f := range strings.Split(newFiles, "\n") {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		content, err := os.ReadFile(filepathJoin(r.path, f))
+		if err != nil {
+			b.WriteString(fmt.Sprintf("# could not read new file: %s\n", f))
+			continue
+		}
+		lines := strings.Split(string(content), "\n")
+		// Drop the empty element from a trailing newline
+		if len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		b.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", f, f))
+		b.WriteString("new file mode 100644\n")
+		b.WriteString(fmt.Sprintf("--- /dev/null\n+++ b/%s\n", f))
+		if len(lines) == 0 {
+			b.WriteString("@@ -0,0 +0,0 @@\n")
+		} else {
+			b.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
+			for _, line := range lines {
+				b.WriteString("+" + line + "\n")
+			}
+		}
+	}
+
+	return b.String(), nil
 }
 
 func (r *Repo) LatestTag() (string, error) {

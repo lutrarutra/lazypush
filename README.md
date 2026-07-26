@@ -2,6 +2,20 @@
 
 Interactive commit, release, tag, and PR creation tool powered by LLMs.
 
+## Install
+
+**One-liner (macOS / Linux):**
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/lutrarutra/lazypush/main/install.sh | sh
+```
+
+**With Go:**
+
+```bash
+go install github.com/lutrarutra/lazypush/cmd/lazypush@latest
+```
+
 ## Usage
 
 ```bash
