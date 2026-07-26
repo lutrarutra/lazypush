@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -134,6 +135,7 @@ func (r *Repo) Commit(message string) error {
 		Author: &object.Signature{
 			Name:  "lazypush",
 			Email: "lazypush@local",
+			When:  time.Now(),
 		},
 	})
 	if err != nil {
@@ -170,7 +172,7 @@ func (r *Repo) DeleteTag(name string) error {
 
 func (r *Repo) Push(remote string) error {
 	// Use git push CLI — handles auth, worktrees, and upstream correctly
-	cmd := exec.Command("git", "push", "--follow-tags", remote, "HEAD")
+	cmd := exec.Command("git", "push", "-u", "--follow-tags", remote, "HEAD")
 	cmd.Dir = r.path
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
