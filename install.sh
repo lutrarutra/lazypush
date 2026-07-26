@@ -52,8 +52,11 @@ if [ -z "$VERSION" ]; then
 fi
 echo "   Latest: $VERSION" >&2
 
+# GoReleaser strips the v prefix in archive filenames
+VERSION_NO_V="${VERSION#v}"
+
 # --- Download archive ---
-ARCHIVE="${BIN}_${VERSION}_${OS}_${ARCH}.tar.gz"
+ARCHIVE="${BIN}_${VERSION_NO_V}_${OS}_${ARCH}.tar.gz"
 URL="https://github.com/$REPO/releases/download/$VERSION/$ARCHIVE"
 
 TMPDIR=$(mktemp -d)
