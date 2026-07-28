@@ -23,7 +23,7 @@ type Repo struct {
 }
 
 func (r *Repo) SetBaseBranch(b string) { r.baseBranch = b }
-func (r *Repo) BaseBranch() string    { return r.baseBranch }
+func (r *Repo) BaseBranch() string     { return r.baseBranch }
 
 func Open(path string) (*Repo, error) {
 	abs, err := resolveGitDir(path)

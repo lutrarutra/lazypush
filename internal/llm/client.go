@@ -50,9 +50,9 @@ type toolDef struct {
 }
 
 type toolFuncDef struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Parameters  toolFuncParams  `json:"parameters"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  toolFuncParams `json:"parameters"`
 }
 
 type toolFuncParams struct {

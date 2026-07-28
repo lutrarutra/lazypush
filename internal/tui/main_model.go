@@ -211,6 +211,7 @@ func (m *Model) updatePRAsk(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.prAsk.confirmed = false
 		switch m.prAsk.choice {
 		case prChoiceCreate:
+			m.includePR = true
 			m.loading = newLoadingScreen("Fetching branches...")
 			m.screen = screenLoading
 			return m, m.loadingCmd(m.afterPRAskCreate())
