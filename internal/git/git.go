@@ -60,9 +60,13 @@ func (r *Repo) StagedCount() (int, error) {
 }
 
 func (r *Repo) StageAll() error {
-	_, err := r.worktree.Add(".")
-	if err != nil {
-		return fmt.Errorf("stage .: %w", err)
+	// Use git CLI — properly respects .gitignore and handles permission errors
+	cmd := exec.Command("git", "add", "-A")
+	cmd.Dir = r.path
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git add -A: %w\n%s", err, stderr.String())
 	}
 	return nil
 }
