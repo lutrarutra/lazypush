@@ -26,11 +26,6 @@ func newLoadingScreen(label string) loadingScreenModel {
 	}
 }
 
-func (m *loadingScreenModel) SetProgress(step, maxStep int) {
-	m.step = step
-	m.maxStep = maxStep
-}
-
 func (m loadingScreenModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
@@ -47,4 +42,9 @@ func (m loadingScreenModel) View() string {
 		progress = fmt.Sprintf("  (step %d/%d)", m.step, m.maxStep)
 	}
 	return "\n" + lipgloss.NewStyle().Bold(true).Render("  "+m.spinner.View()+" "+m.label+progress) + "\n"
+}
+
+type progressMsg struct {
+	step    int
+	maxStep int
 }

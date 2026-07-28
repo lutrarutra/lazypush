@@ -333,19 +333,15 @@ func (m *Model) generatePRDescription() tea.Cmd {
 			return prDescriptionReadyMsg{description: ""}
 		}
 
-		// Set the target branch for tool operations
 		m.repo.SetBaseBranch(m.targetBranch)
 
-		// Use iterative tool-calling flow
 		sys, user := llm.PRDescriptionIterPrompt(m.targetBranch)
 		desc, err := m.llmClient.GenerateWithTools(
 			context.Background(),
 			sys, user,
 			m.repo,
 			100,
-			func(step, max int) {
-				m.loading.SetProgress(step, max)
-			},
+			nil, // no progress callback to avoid data races with the TUI
 		)
 		if err != nil {
 			return errMsg{err: fmt.Sprintf("generate PR: %v", err)}
@@ -642,6 +638,8 @@ func (m *Model) createPR() error {
 			return err
 		}
 		m.prURL = prURL
+	} else {
+		return fmt.Errorf("GitHub CLI (gh) not found — install it from https://cli.github.com to enable PR creation. Your PR description was:\n\n%s", m.prBody)
 	}
 	return nil
 }
@@ -676,24 +674,77 @@ func (m *Model) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m *Model) workflowLine() string {
+	steps := []struct {
+		screen screen
+		label  string
+	}{
+		{screenVersion, "🏷️  Tag"},
+		{screenReview, "💬  Commit"},
+		{screenPRAsk, "🔀  Next"},
+		{screenBranchSelect, "🎯  Branch"},
+		{screenNewBranch, "🌿  New"},
+		{screenPRReview, "📝  PR"},
+		{screenConfirm, "✅  Confirm"},
+	}
+
+	// Build dots
+	var s strings.Builder
+	for i, step := range steps {
+		if i > 0 {
+			s.WriteString("  ")
+		}
+		if step.screen == m.screen {
+			s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("236")).Background(lipgloss.Color("39")).Render(" " + step.label + " "))
+		} else if m.isWorkflowStepCompleted(i) {
+			s.WriteString(lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("114")).Render(step.label))
+		} else {
+			s.WriteString(lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("240")).Render(step.label))
+		}
+	}
+	return s.String()
+}
+
+func (m *Model) isWorkflowStepCompleted(index int) bool {
+	switch index {
+	case 0: // Tag — past if we're past version screen
+		return m.screen > screenVersion
+	case 1: // Commit — past review
+		return m.screen > screenReview
+	case 2: // Next — past PR ask
+		return m.screen > screenPRAsk
+	case 3: // Branch select — past it
+		return m.screen > screenBranchSelect
+	case 4: // New branch — past it
+		return m.screen > screenNewBranch
+	case 5: // PR review — past it
+		return m.screen > screenPRReview
+	case 6: // Confirm — at or past it
+		return m.screen >= screenConfirm
+	}
+	return false
+}
+
 func (m *Model) View() string {
 	switch m.screen {
 	case screenLogin:
-		return m.login.View()
+		return m.workflowLine() + "\n\n" + m.login.View()
 	case screenVersion:
-		return m.version.View()
+		return m.workflowLine() + "\n\n" + m.version.View()
 	case screenLoading:
-		return m.loading.View()
+		return m.workflowLine() + "\n\n" + m.loading.View()
 	case screenReview:
-		return m.review.View()
+		return m.workflowLine() + "\n\n" + m.review.View()
 	case screenPRAsk:
-		return m.prAsk.View()
+		return m.workflowLine() + "\n\n" + m.prAsk.View()
 	case screenBranchSelect:
-		return m.branchSel.View()
+		return m.workflowLine() + "\n\n" + m.branchSel.View()
 	case screenPRReview:
-		return m.prReview.View()
+		return m.workflowLine() + "\n\n" + m.prReview.View()
 	case screenNewBranch:
 		var s strings.Builder
+		s.WriteString(m.workflowLine())
+		s.WriteString("\n\n")
 		s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render("🌿  New Branch"))
 		s.WriteString("\n\n")
 		s.WriteString(lipgloss.NewStyle().Faint(true).Render("Create a new branch to push these changes to:"))
@@ -707,9 +758,9 @@ func (m *Model) View() string {
 		s.WriteString(lipgloss.NewStyle().Faint(true).Render(" Back"))
 		return s.String()
 	case screenConfirm:
-		return m.confirm.View()
+		return m.workflowLine() + "\n\n" + m.confirm.View()
 	case screenProgress:
-		return m.progress.View()
+		return m.workflowLine() + "\n\n" + m.progress.View()
 	}
 	return ""
 }

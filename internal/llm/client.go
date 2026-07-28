@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 )
 
@@ -305,11 +304,7 @@ func (c *Client) chatComplete(ctx context.Context, messages []chatMessage, withT
 	}
 
 	if chatResp.Usage != nil {
-		log.Printf("📊 tokens: ↑%d in → ↓%d out (total %d)",
-			chatResp.Usage.PromptTokens,
-			chatResp.Usage.CompletionTokens,
-			chatResp.Usage.TotalTokens,
-		)
+		// token info silently captured, not logged to avoid TUI corruption
 	}
 
 	return &chatResp, nil
