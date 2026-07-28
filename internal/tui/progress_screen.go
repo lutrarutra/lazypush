@@ -88,15 +88,19 @@ func (m progressScreenModel) View() string {
 			}
 			s.WriteString(step.label)
 			if step.msg != "" {
-				s.WriteString(" " + step.msg)
+				s.WriteString(" ")
+				s.WriteString(step.msg)
 			}
 			s.WriteString("\n")
 		} else if i == m.current {
-			s.WriteString(m.spinner.View() + " ")
+			s.WriteString(m.spinner.View())
+			s.WriteString(" ")
 			s.WriteString(step.label)
 			s.WriteString("\n")
 		} else {
-			s.WriteString("  " + step.label + "\n")
+			s.WriteString("  ")
+			s.WriteString(step.label)
+			s.WriteString("\n")
 		}
 	}
 

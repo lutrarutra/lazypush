@@ -1,0 +1,115 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+type prChoice int
+
+const (
+	prChoiceCreate prChoice = iota
+	prChoiceBranchOut
+	prChoiceCommitHere
+)
+
+type prAskScreenModel struct {
+	choices   []string
+	selected  int
+	choice    prChoice
+	confirmed bool
+	cancelled bool
+}
+
+func newPRAskScreen(currentBranch string) prAskScreenModel {
+	choices := []string{
+		"Create PR to another branch",
+		"Push to new branch",
+		"Commit to current branch",
+	}
+	// If on main, hide the first option and default to "Commit here"
+	sel := 0
+	if currentBranch == "main" || currentBranch == "master" {
+		choices = choices[1:] // only "Push to new branch" and "Commit to current"
+		sel = 1               // default to "Commit to current" (index 1 in original, index 0 in slice after slicing... wait)
+		// After slicing: [Push to new branch, Commit to current branch]
+		// We want default to be "Commit to current" which is now index 1
+		sel = 1
+	}
+	return prAskScreenModel{
+		choices:  choices,
+		selected: sel,
+	}
+}
+
+func (m prAskScreenModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m prAskScreenModel) Update(msg tea.Msg) (prAskScreenModel, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			if m.selected > 0 {
+				m.selected--
+			}
+		case "down", "j":
+			if m.selected < len(m.choices)-1 {
+				m.selected++
+			}
+		case "enter":
+			// Map selection back to actual choice
+			// We use the original order: Create(0), BranchOut(1), CommitHere(2)
+			// If on main and choices is [BranchOut, CommitHere]:
+			//   selected 0 → BranchOut(1), selected 1 → CommitHere(2)
+			if len(m.choices) == 2 {
+				// on main — choices are [BranchOut, CommitHere]
+				switch m.selected {
+				case 0:
+					m.choice = prChoiceBranchOut
+				case 1:
+					m.choice = prChoiceCommitHere
+				}
+			} else {
+				switch m.selected {
+				case 0:
+					m.choice = prChoiceCreate
+				case 1:
+					m.choice = prChoiceBranchOut
+				case 2:
+					m.choice = prChoiceCommitHere
+				}
+			}
+			m.confirmed = true
+			return m, nil
+		case "esc":
+			m.cancelled = true
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (m prAskScreenModel) View() string {
+	var s strings.Builder
+	s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render("🔀  Next Step"))
+	s.WriteString("\n\n")
+	s.WriteString(lipgloss.NewStyle().Faint(true).Render("What would you like to do?"))
+	s.WriteString("\n\n")
+
+	for i, choice := range m.choices {
+		if i == m.selected {
+			s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render(fmt.Sprintf("> %s", choice)))
+		} else {
+			s.WriteString(fmt.Sprintf("  %s", choice))
+		}
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
+	s.WriteString(lipgloss.NewStyle().Faint(true).Render("  ↑/↓ navigate  Enter select  Esc back"))
+	return s.String()
+}

@@ -259,6 +259,91 @@ func (r *Repo) Path() string {
 	return r.path
 }
 
+// CurrentBranch returns the short name of the current branch.
+func (r *Repo) CurrentBranch() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = r.path
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("get current branch: %w\nstderr: %s", err, stderr.String())
+	}
+	return strings.TrimSpace(stdout.String()), nil
+}
+
+// ListBranches returns remote branch names, with main/master sorted first.
+func (r *Repo) ListBranches() ([]string, error) {
+	cmd := exec.Command("git", "branch", "-r", "--format=%(refname:short)")
+	cmd.Dir = r.path
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		// Fall back to local branches
+		cmd = exec.Command("git", "branch", "--format=%(refname:short)")
+		cmd.Dir = r.path
+		stdout.Reset()
+		cmd.Stdout = &stdout
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("list branches: %w", err)
+		}
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	var branches []string
+	seen := map[string]bool{}
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.Contains(line, "HEAD") {
+			continue
+		}
+		name := strings.TrimPrefix(line, "origin/")
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		if name == "main" || name == "master" {
+			branches = append([]string{name}, branches...)
+		} else {
+			branches = append(branches, name)
+		}
+	}
+	return branches, nil
+}
+
+// DiffToBranch returns the diff between HEAD and the given branch.
+func (r *Repo) DiffToBranch(branch string) (string, error) {
+	cmd := exec.Command("git", "diff", fmt.Sprintf("origin/%s...HEAD", branch))
+	cmd.Dir = r.path
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		// Try without origin/ prefix
+		cmd2 := exec.Command("git", "diff", fmt.Sprintf("%s...HEAD", branch))
+		cmd2.Dir = r.path
+		stdout.Reset()
+		stderr.Reset()
+		cmd2.Stdout = &stdout
+		cmd2.Stderr = &stderr
+		if err := cmd2.Run(); err != nil {
+			return "", fmt.Errorf("diff to %s: %w\nstderr: %s", branch, err, stderr.String())
+		}
+	}
+	return stdout.String(), nil
+}
+
+// CreateBranchAndSwitch creates a new branch from HEAD and checks it out.
+func (r *Repo) CreateBranchAndSwitch(name string) error {
+	cmd := exec.Command("git", "checkout", "-b", name)
+	cmd.Dir = r.path
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("create branch %s: %w\nstderr: %s", name, err, stderr.String())
+	}
+	return nil
+}
+
 func resolveGitDir(path string) (string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
