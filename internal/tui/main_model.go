@@ -95,8 +95,22 @@ func (m *Model) Init() tea.Cmd {
 	m.config = cfg
 	m.repo = repo
 
+	// Check for diff early to decide if we need version/review steps
+	if repo != nil {
+		diff, err := repo.Diff()
+		if err == nil {
+			m.hasDiff = diff != ""
+		}
+	}
+
 	if cfg.APIKey != "" && cfg.APIURL != "" && cfg.Model != "" {
 		m.llmClient = llm.New(cfg.APIURL, cfg.APIKey, cfg.Model)
+		if !m.hasDiff {
+			// No changes — skip version screen, go straight to PR flow
+			m.loading = newLoadingScreen("Checking branch...")
+			m.screen = screenLoading
+			return m.afterReviewConfirmed()
+		}
 		m.screen = screenVersion
 		return m.initVersionScreen()
 	}
@@ -226,7 +240,7 @@ func (m *Model) updateBranchSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.branchSel, cmd = m.branchSel.Update(msg)
 
 	if m.branchSel.cancelled {
-		m.prAsk = newPRAskScreen(m.currentBranch)
+		m.prAsk = newPRAskScreen(m.currentBranch, m.hasDiff)
 		m.screen = screenPRAsk
 		return m, nil
 	}
@@ -311,6 +325,11 @@ func (m *Model) updateLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.llmClient = llm.New(apiURL, apiKey, model)
+		if !m.hasDiff {
+			m.loading = newLoadingScreen("Checking branch...")
+			m.screen = screenLoading
+			return m, m.afterReviewConfirmed()
+		}
 		return m, m.initVersionScreen()
 	}
 
@@ -368,7 +387,7 @@ func (m *Model) updateLoading(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case branchCheckedMsg:
 		m.includePR = false
-		m.prAsk = newPRAskScreen(msg.branch)
+		m.prAsk = newPRAskScreen(msg.branch, m.hasDiff)
 		m.screen = screenPRAsk
 		return m, nil
 	case errMsg:

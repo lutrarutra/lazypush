@@ -108,9 +108,11 @@ func (m confirmScreenModel) View() string {
 	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render(commitLabel))
 	s.WriteString("\n")
 	if m.needsTagging {
-		tagOp := fmt.Sprintf("  ● Tag %s", m.versionTag)
-		if !m.isBump {
-			tagOp += " (re-tag)"
+		var tagOp string
+		if m.isBump {
+			tagOp = fmt.Sprintf("  ● Tag %s → %s", m.oldTag, m.versionTag)
+		} else {
+			tagOp = fmt.Sprintf("  ● Tag %s (re-tag)", m.versionTag)
 		}
 		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render(tagOp))
 		s.WriteString("\n")

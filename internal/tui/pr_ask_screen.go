@@ -24,22 +24,28 @@ type prAskScreenModel struct {
 	cancelled bool
 }
 
-func newPRAskScreen(currentBranch string) prAskScreenModel {
+func newPRAskScreen(currentBranch string, hasDiff bool) prAskScreenModel {
 	choices := []string{
 		"Create PR to another branch",
-		"Push to new branch",
-		"Commit to current branch",
+	}
+	if hasDiff {
+		choices = append(choices, "Push to new branch", "Commit to current branch")
 	}
 	if currentBranch == "main" || currentBranch == "master" {
-		choices = choices[1:]
+		if !hasDiff {
+			return prAskScreenModel{
+				choices:  choices,
+				selected: 0, // only option
+			}
+		}
 		return prAskScreenModel{
-			choices:  choices,
+			choices:  choices[1:],
 			selected: 1, // Commit to current
 		}
 	}
 	return prAskScreenModel{
 		choices:  choices,
-		selected: 2, // Commit to current is default
+		selected: len(choices) - 1, // last option (Commit) is default
 	}
 }
 
@@ -60,6 +66,11 @@ func (m prAskScreenModel) Update(msg tea.Msg) (prAskScreenModel, tea.Cmd) {
 				m.selected++
 			}
 		case "enter":
+			if len(m.choices) == 1 {
+				m.choice = prChoiceCreate
+				m.confirmed = true
+				return m, nil
+			}
 			// Map selection back to actual choice
 			// We use the original order: Create(0), BranchOut(1), CommitHere(2)
 			// If on main and choices is [BranchOut, CommitHere]:
