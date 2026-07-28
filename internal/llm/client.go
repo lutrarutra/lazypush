@@ -37,7 +37,8 @@ type chatRequest struct {
 }
 
 type chatChoice struct {
-	Message chatMessage `json:"message"`
+	Message      chatMessage `json:"message"`
+	FinishReason string     `json:"finish_reason"`
 }
 
 type chatResponse struct {
@@ -47,7 +48,7 @@ type chatResponse struct {
 func (c *Client) Generate(ctx context.Context, system, user string) (string, error) {
 	req := chatRequest{
 		Model:     c.model,
-		MaxTokens: 4096,
+		MaxTokens: 16384,
 		Messages: []chatMessage{
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},

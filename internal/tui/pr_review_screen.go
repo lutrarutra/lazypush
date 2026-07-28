@@ -18,7 +18,7 @@ func newPRReviewScreen(description string) prReviewScreenModel {
 	ta := textarea.New()
 	ta.SetValue(description)
 	ta.SetWidth(80)
-	ta.SetHeight(10)
+	ta.SetHeight(15)
 	ta.ShowLineNumbers = false
 	ta.Prompt = ""
 	ta.Focus()
