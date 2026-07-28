@@ -325,21 +325,29 @@ func (m *Model) updatePRReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) generatePRDescription() tea.Cmd {
 	return func() tea.Msg {
-		diff, err := m.repo.DiffToBranch(m.targetBranch)
-		if err != nil {
-			return errMsg{err: fmt.Sprintf("diff to %s: %v", m.targetBranch, err)}
-		}
-		if diff == "" && m.llmClient != nil {
-			return prDescriptionReadyMsg{description: ""}
+		if m.repo == nil {
+			return errMsg{err: "no git repository found"}
 		}
 		if m.llmClient == nil {
 			return prDescriptionReadyMsg{description: ""}
 		}
 
-		sys, user := llm.PRDescriptionPrompt(diff, m.targetBranch)
-		desc, err := m.llmClient.Generate(context.Background(), sys, user)
+		// Set the target branch for tool operations
+		m.repo.SetBaseBranch(m.targetBranch)
+
+		// Use iterative tool-calling flow
+		sys, user := llm.PRDescriptionIterPrompt(m.targetBranch)
+		desc, err := m.llmClient.GenerateWithTools(
+			context.Background(),
+			sys, user,
+			m.repo,
+			100,
+			func(step, max int) {
+				m.loading.SetProgress(step, max)
+			},
+		)
 		if err != nil {
-			return errMsg{err: err.Error()}
+			return errMsg{err: fmt.Sprintf("generate PR: %v", err)}
 		}
 		return prDescriptionReadyMsg{description: desc}
 	}

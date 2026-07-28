@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -9,6 +11,8 @@ import (
 type loadingScreenModel struct {
 	spinner spinner.Model
 	label   string
+	step    int
+	maxStep int
 }
 
 func newLoadingScreen(label string) loadingScreenModel {
@@ -22,6 +26,11 @@ func newLoadingScreen(label string) loadingScreenModel {
 	}
 }
 
+func (m *loadingScreenModel) SetProgress(step, maxStep int) {
+	m.step = step
+	m.maxStep = maxStep
+}
+
 func (m loadingScreenModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
@@ -33,5 +42,9 @@ func (m loadingScreenModel) Update(msg tea.Msg) (loadingScreenModel, tea.Cmd) {
 }
 
 func (m loadingScreenModel) View() string {
-	return "\n" + lipgloss.NewStyle().Bold(true).Render("  "+m.spinner.View()+" "+m.label) + "\n"
+	progress := ""
+	if m.maxStep > 0 {
+		progress = fmt.Sprintf("  (step %d/%d)", m.step, m.maxStep)
+	}
+	return "\n" + lipgloss.NewStyle().Bold(true).Render("  "+m.spinner.View()+" "+m.label+progress) + "\n"
 }

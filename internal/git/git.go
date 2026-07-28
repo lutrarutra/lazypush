@@ -16,10 +16,14 @@ import (
 )
 
 type Repo struct {
-	repo     *gogit.Repository
-	worktree *gogit.Worktree
-	path     string
+	repo       *gogit.Repository
+	worktree   *gogit.Worktree
+	path       string
+	baseBranch string
 }
+
+func (r *Repo) SetBaseBranch(b string) { r.baseBranch = b }
+func (r *Repo) BaseBranch() string    { return r.baseBranch }
 
 func Open(path string) (*Repo, error) {
 	abs, err := resolveGitDir(path)
@@ -342,6 +346,97 @@ func (r *Repo) CreateBranchAndSwitch(name string) error {
 		return fmt.Errorf("create branch %s: %w\nstderr: %s", name, err, stderr.String())
 	}
 	return nil
+}
+
+// ChangedFiles returns a summarized list of files changed between HEAD and base.
+func (r *Repo) ChangedFiles() (string, error) {
+	args := []string{"diff", "--stat"}
+	if r.baseBranch != "" {
+		args = append(args, fmt.Sprintf("origin/%s...HEAD", r.baseBranch))
+	} else {
+		args = append(args, "HEAD")
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = r.path
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git diff --stat: %w\nstderr: %s", err, stderr.String())
+	}
+	return strings.TrimSpace(stdout.String()), nil
+}
+
+// ReadCurrentFile reads lines [startLine, endLine] (1-based, inclusive) from the working tree.
+func (r *Repo) ReadCurrentFile(path string, start, end int) (string, error) {
+	fullPath := filepathJoin(r.path, path)
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	return sliceLines(string(data), start, end), nil
+}
+
+// ReadBaseFile reads lines from the file in the base branch.
+func (r *Repo) ReadBaseFile(path string, start, end int) (string, error) {
+	treeish := r.baseBranch
+	if treeish == "" {
+		treeish = "HEAD~1"
+	}
+	ref := fmt.Sprintf("origin/%s:%s", treeish, path)
+	cmd := exec.Command("git", "show", ref)
+	cmd.Dir = r.path
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		ref = fmt.Sprintf("%s:%s", treeish, path)
+		cmd = exec.Command("git", "show", ref)
+		cmd.Dir = r.path
+		stdout.Reset()
+		stderr.Reset()
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			return "", fmt.Errorf("show %s: %w\nstderr: %s", ref, err, stderr.String())
+		}
+	}
+	return sliceLines(stdout.String(), start, end), nil
+}
+
+// ShowFileDiff returns the unified diff for a single file between HEAD and base.
+func (r *Repo) ShowFileDiff(path string) (string, error) {
+	args := []string{"diff"}
+	if r.baseBranch != "" {
+		args = append(args, fmt.Sprintf("origin/%s...HEAD", r.baseBranch))
+	} else {
+		args = append(args, "HEAD")
+	}
+	args = append(args, "--", path)
+	cmd := exec.Command("git", args...)
+	cmd.Dir = r.path
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("diff %s: %w\nstderr: %s", path, err, stderr.String())
+	}
+	return stdout.String(), nil
+}
+
+// sliceLines extracts lines [startLine, endLine] (1-based, inclusive).
+func sliceLines(s string, startLine, endLine int) string {
+	lines := strings.Split(s, "\n")
+	if startLine < 1 {
+		startLine = 1
+	}
+	if endLine > len(lines) {
+		endLine = len(lines)
+	}
+	if startLine > len(lines) || startLine > endLine {
+		return s
+	}
+	return strings.Join(lines[startLine-1:endLine], "\n")
 }
 
 func resolveGitDir(path string) (string, error) {
