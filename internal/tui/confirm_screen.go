@@ -9,22 +9,30 @@ import (
 )
 
 type confirmScreenModel struct {
-	versionTag   string
-	commitMsg    string
-	includePR    bool
-	needsTagging bool
-	skipNote     string
-	confirmed    bool
-	cancelled    bool
+	versionTag    string
+	oldTag        string
+	commitMsg     string
+	includePR     bool
+	needsTagging  bool
+	isBump        bool
+	skipNote      string
+	currentBranch string
+	targetBranch  string
+	confirmed     bool
+	cancelled     bool
 }
 
-func newConfirmScreen(versionTag, commitMsg string, includePR, needsTagging bool, skipNote string) confirmScreenModel {
+func newConfirmScreen(versionTag, oldTag, commitMsg string, includePR, needsTagging, isBump bool, skipNote, currentBranch, targetBranch string) confirmScreenModel {
 	return confirmScreenModel{
-		versionTag:   versionTag,
-		commitMsg:    commitMsg,
-		includePR:    includePR,
-		needsTagging: needsTagging,
-		skipNote:     skipNote,
+		versionTag:    versionTag,
+		oldTag:        oldTag,
+		commitMsg:     commitMsg,
+		includePR:     includePR,
+		needsTagging:  needsTagging,
+		isBump:        isBump,
+		skipNote:      skipNote,
+		currentBranch: currentBranch,
+		targetBranch:  targetBranch,
 	}
 }
 
@@ -60,8 +68,16 @@ func (m confirmScreenModel) View() string {
 	s.WriteString("\n\n")
 
 	// Version tag
-	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Render("🏷️  Tag: "))
-	s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render(m.versionTag))
+	if m.needsTagging && m.isBump {
+		// Version changed: show old → new
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Render("🏷️  Tag: "))
+		s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render(m.oldTag))
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Render(" → "))
+		s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render(m.versionTag))
+	} else {
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Render("🏷️  Tag: "))
+		s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render(m.versionTag))
+	}
 	s.WriteString("\n")
 
 	// Commit message (preview — first 3 lines)
@@ -88,16 +104,27 @@ func (m confirmScreenModel) View() string {
 	// Operations
 	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Render("⚡  Operations:"))
 	s.WriteString("\n")
-	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render("  ● Commit"))
+	commitLabel := fmt.Sprintf("  ● Commit → %s", m.currentBranch)
+	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render(commitLabel))
 	s.WriteString("\n")
 	if m.needsTagging {
-		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("  ● Tag "))
-		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render(m.versionTag))
+		tagOp := fmt.Sprintf("  ● Tag %s", m.versionTag)
+		if !m.isBump {
+			tagOp += " (re-tag)"
+		}
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render(tagOp))
 		s.WriteString("\n")
 	}
-	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render("  ● Push"))
-	s.WriteString("\n")
-	if m.includePR {
+	if m.currentBranch != "" {
+		pushLabel := fmt.Sprintf("  ● Push %s → origin/%s", m.currentBranch, m.currentBranch)
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render(pushLabel))
+		s.WriteString("\n")
+	}
+	if m.includePR && m.targetBranch != "" {
+		prLabel := fmt.Sprintf("  ● Create PR %s → %s", m.currentBranch, m.targetBranch)
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("141")).Render(prLabel))
+		s.WriteString("\n")
+	} else if m.includePR && m.targetBranch == "" {
 		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("141")).Render("  ● Create Pull Request"))
 		s.WriteString("\n")
 	}

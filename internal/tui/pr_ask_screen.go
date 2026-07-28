@@ -30,18 +30,16 @@ func newPRAskScreen(currentBranch string) prAskScreenModel {
 		"Push to new branch",
 		"Commit to current branch",
 	}
-	// If on main, hide the first option and default to "Commit here"
-	sel := 0
 	if currentBranch == "main" || currentBranch == "master" {
-		choices = choices[1:] // only "Push to new branch" and "Commit to current"
-		sel = 1               // default to "Commit to current" (index 1 in original, index 0 in slice after slicing... wait)
-		// After slicing: [Push to new branch, Commit to current branch]
-		// We want default to be "Commit to current" which is now index 1
-		sel = 1
+		choices = choices[1:]
+		return prAskScreenModel{
+			choices:  choices,
+			selected: 1, // Commit to current
+		}
 	}
 	return prAskScreenModel{
 		choices:  choices,
-		selected: sel,
+		selected: 2, // Commit to current is default
 	}
 }
 

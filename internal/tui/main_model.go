@@ -47,16 +47,17 @@ type Model struct {
 	repo      *git.Repo
 	llmClient *llm.Client
 
-	versionTag    string
-	currentBranch string
-	commitMsg     string
-	targetBranch  string
-	prBody        string
-	prURL         string
-	includePR     bool
-	newBranchName string
+	versionTag     string
+	currentBranch  string
+	commitMsg      string
+	targetBranch   string
+	prBody         string
+	prURL          string
+	includePR      bool
+	hasDiff        bool
+	newBranchName  string
 	newBranchInput textinput.Model
-	err           error
+	err            error
 }
 
 func NewModel() *Model {
@@ -67,9 +68,9 @@ func NewModel() *Model {
 	nb.CharLimit = 100
 
 	return &Model{
-		screen:        screenLogin,
-		login:         newLoginScreen(),
-		newBranchName: "",
+		screen:         screenLogin,
+		login:          newLoginScreen(),
+		newBranchName:  "",
 		newBranchInput: nb,
 	}
 }
@@ -160,7 +161,7 @@ func (m *Model) updatePRAsk(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case prChoiceCommitHere:
 			m.includePR = false
-			m.confirm = newConfirmScreen(m.versionTag, m.review.commitMessage.Value(), false, m.needsTagging(), "")
+			m.confirm = newConfirmScreen(m.versionTag, m.version.currentTag, m.review.commitMessage.Value(), false, m.needsTagging(), m.versionTag != m.version.currentTag, "", m.currentBranch, "")
 			m.screen = screenConfirm
 			return m, nil
 		}
@@ -202,8 +203,9 @@ func (m *Model) updateNewBranch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			m.currentBranch = name
-			m.confirm = newConfirmScreen(m.versionTag, m.review.commitMessage.Value(), false, m.needsTagging(),
+			m.confirm = newConfirmScreen(m.versionTag, m.version.currentTag, m.review.commitMessage.Value(), false, m.needsTagging(), m.versionTag != m.version.currentTag,
 				fmt.Sprintf("Pushing to new branch: %s", name),
+				m.currentBranch, "",
 			)
 			m.screen = screenConfirm
 			return m, nil
@@ -243,7 +245,8 @@ func (m *Model) updatePRReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.prReview.confirmed {
 		m.prBody = m.prReview.description.Value()
-		m.confirm = newConfirmScreen(m.versionTag, m.review.commitMessage.Value(), true, m.needsTagging(), "")
+		m.confirm = newConfirmScreen(m.versionTag, m.version.currentTag, m.review.commitMessage.Value(), true, m.needsTagging(), m.versionTag != m.version.currentTag, "", m.currentBranch, m.targetBranch)
+		m.screen = screenConfirm
 		m.screen = screenConfirm
 		return m, nil
 	}
@@ -335,9 +338,16 @@ func (m *Model) updateVersion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if err != nil {
 			diff = ""
 		}
-		m.review = newReviewScreen(diff, "")
-		m.screen = screenReview
-		return m, nil
+		m.hasDiff = diff != ""
+		if m.hasDiff {
+			m.review = newReviewScreen(diff, "")
+			m.screen = screenReview
+			return m, nil
+		}
+		// No changes — skip review, go straight to branch check / PR flow
+		m.loading = newLoadingScreen("Checking branch...")
+		m.screen = screenLoading
+		return m, m.afterReviewConfirmed()
 	}
 
 	return m, cmd
@@ -349,6 +359,9 @@ func (m *Model) updateLoading(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.review = newReviewScreen(msg.diff, msg.message)
 		m.screen = screenReview
 		return m, nil
+	case noDiffReadyMsg:
+		// No changes — go straight to post-review flow
+		return m, m.afterReviewConfirmed()
 	case prDescriptionReadyMsg:
 		m.prReview = newPRReviewScreen(msg.description)
 		m.screen = screenPRReview
@@ -379,9 +392,10 @@ func (m *Model) generateCommitMessage() tea.Cmd {
 			return errMsg{err: err.Error()}
 		}
 
-		if diff == "" {
-			// No changes — show empty review screen
-			return commitMessageReadyMsg{diff: "", message: ""}
+		m.hasDiff = diff != ""
+
+		if !m.hasDiff {
+			return noDiffReadyMsg{}
 		}
 
 		sys, user := llm.CommitMessagePrompt(diff)
@@ -430,12 +444,14 @@ func (m *Model) afterReviewConfirmed() tea.Cmd {
 }
 
 func (m *Model) executeOperations() tea.Cmd {
-	// Build step labels dynamically based on what needs to happen
-	steps := []string{"Committing..."}
-	if m.needsTagging() {
-		steps = append(steps, "Tagging...")
+	steps := []string{}
+	if m.hasDiff {
+		steps = append(steps, "Committing...")
+		if m.needsTagging() {
+			steps = append(steps, "Tagging...")
+		}
+		steps = append(steps, "Pushing...")
 	}
-	steps = append(steps, "Pushing...")
 	if m.includePR {
 		steps = append(steps, "Creating PR...")
 	}
@@ -453,28 +469,34 @@ func (m *Model) execStep(displayIdx int) tea.Cmd {
 		var err error
 		switch displayIdx {
 		case 0:
-			err = m.repo.Commit(m.review.commitMessage.Value())
-		case 1:
-			if m.needsTagging() {
-				if m.version.reTag {
-					_ = m.repo.DeleteTag(m.versionTag)
-					err = m.repo.Tag(m.versionTag)
-				} else {
-					err = m.repo.Tag(m.versionTag)
-				}
-			} else {
-				err = m.repo.Push("origin")
-			}
-		case 2:
-			if m.needsTagging() {
-				err = m.repo.Push("origin")
+			if m.hasDiff {
+				err = m.repo.Commit(m.review.commitMessage.Value())
 			} else if m.includePR {
 				err = m.createPR()
 			}
-		case 3:
-			if m.includePR {
+		case 1:
+			if m.hasDiff {
+				if m.needsTagging() {
+					if m.version.reTag {
+						_ = m.repo.DeleteTag(m.versionTag)
+						err = m.repo.Tag(m.versionTag)
+					} else {
+						err = m.repo.Tag(m.versionTag)
+					}
+				} else {
+					err = m.repo.Push("origin")
+				}
+			} else if m.includePR {
 				err = m.createPR()
 			}
+		case 2:
+			if m.hasDiff && m.needsTagging() {
+				err = m.repo.Push("origin")
+			} else {
+				err = m.createPR()
+			}
+		case 3:
+			err = m.createPR()
 		}
 		return execStepResult{step: displayIdx, err: err}
 	}
@@ -563,6 +585,8 @@ type commitMessageReadyMsg struct {
 	diff    string
 	message string
 }
+
+type noDiffReadyMsg struct{}
 
 type branchCheckedMsg struct {
 	branch string
