@@ -220,55 +220,67 @@ func (m *Model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) executeOperations() tea.Cmd {
-	m.progress = newProgressScreen()
+	// Build step labels dynamically based on what needs to happen
+	steps := []string{"Committing..."}
+	if m.needsTagging() {
+		steps = append(steps, "Tagging...")
+	}
+	steps = append(steps, "Pushing...")
+	if m.review.includePR {
+		steps = append(steps, "Creating PR...")
+	}
+	m.progress = newProgressScreen(steps)
 	m.screen = screenProgress
-	return m.execStep0()
+	return m.execStep(0)
 }
 
-func (m *Model) execStep0() tea.Cmd {
-	return func() tea.Msg {
-		err := m.repo.Commit(m.review.commitMessage.Value())
-		return execStepResult{step: 0, err: err}
-	}
+func (m *Model) needsTagging() bool {
+	return m.version.reTag || m.versionTag != m.version.currentTag
 }
 
-func (m *Model) execStep1() tea.Cmd {
+func (m *Model) execStep(displayIdx int) tea.Cmd {
 	return func() tea.Msg {
-		// Determine if tagging should happen
-		if m.version.reTag {
-			// Keep + re-tag: delete old, create new
-			_ = m.repo.DeleteTag(m.versionTag)
-			err := m.repo.Tag(m.versionTag)
-			return execStepResult{step: 1, err: err}
-		}
-		if m.versionTag != m.version.currentTag {
-			// New version: create tag
-			err := m.repo.Tag(m.versionTag)
-			return execStepResult{step: 1, err: err}
-		}
-		// Keep + no re-tag: skip tagging
-		return execStepResult{step: 1, err: nil}
-	}
-}
-
-func (m *Model) execStep2() tea.Cmd {
-	return func() tea.Msg {
-		err := m.repo.Push("origin")
-		return execStepResult{step: 2, err: err}
-	}
-}
-
-func (m *Model) execStep3() tea.Cmd {
-	return func() tea.Msg {
-		if m.review.includePR && gh.CheckInstalled() {
-			prURL, err := gh.CreatePR(m.review.commitMessage.Value(), m.review.prDescription.Value())
-			if err != nil {
-				return execStepResult{step: 3, err: err}
+		var err error
+		switch displayIdx {
+		case 0:
+			// Always "Committing..."
+			err = m.repo.Commit(m.review.commitMessage.Value())
+		case 1:
+			// Could be "Tagging..." or (if no tagging) "Pushing..."
+			if m.needsTagging() {
+				if m.version.reTag {
+					_ = m.repo.DeleteTag(m.versionTag)
+					err = m.repo.Tag(m.versionTag)
+				} else {
+					err = m.repo.Tag(m.versionTag)
+				}
+			} else {
+				err = m.repo.Push("origin")
 			}
-			m.prURL = prURL
+		case 2:
+			// Could be "Pushing..." or (if no tagging) "Creating PR..."
+			if m.needsTagging() {
+				err = m.repo.Push("origin")
+			} else {
+				err = m.createPR()
+			}
+		case 3:
+			// "Creating PR..." (only reachable when tagging is also active)
+			err = m.createPR()
 		}
-		return execStepResult{step: 3, err: nil}
+		return execStepResult{step: displayIdx, err: err}
 	}
+}
+
+func (m *Model) createPR() error {
+	if gh.CheckInstalled() {
+		prURL, err := gh.CreatePR(m.review.commitMessage.Value(), m.review.prDescription.Value())
+		if err != nil {
+			return err
+		}
+		m.prURL = prURL
+	}
+	return nil
 }
 
 func (m *Model) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -289,23 +301,12 @@ func (m *Model) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !ok {
 			return m, nil // keep showing final failed state
 		}
-		if m.progress.done {
-			return m, nil // keep showing final success state
+		// Chain to next step if there are more
+		nextIdx := msg.step + 1
+		if nextIdx < m.progress.StepCount() {
+			return m, m.execStep(nextIdx)
 		}
-
-		// Chain to next step
-		switch msg.step + 1 {
-		case 1:
-			return m, m.execStep1()
-		case 2:
-			return m, m.execStep2()
-		case 3:
-			return m, m.execStep3()
-		case 4:
-			// All done — keep showing final state
-			return m, nil
-		}
-		return m, nil
+		return m, nil // all done
 	}
 
 	var cmd tea.Cmd

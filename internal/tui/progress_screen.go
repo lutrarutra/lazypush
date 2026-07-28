@@ -22,19 +22,23 @@ type progressScreenModel struct {
 	done    bool
 }
 
-func newProgressScreen() progressScreenModel {
+func (m progressScreenModel) StepCount() int {
+	return len(m.steps)
+}
+
+func newProgressScreen(labels []string) progressScreenModel {
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 	s.Spinner = spinner.Dot
 
+	steps := make([]progressStep, len(labels))
+	for i, l := range labels {
+		steps[i] = progressStep{label: l}
+	}
+
 	return progressScreenModel{
 		spinner: s,
-		steps: []progressStep{
-			{label: "Committing..."},
-			{label: "Tagging..."},
-			{label: "Pushing..."},
-			{label: "Creating PR..."},
-		},
+		steps:   steps,
 		current: 0,
 	}
 }

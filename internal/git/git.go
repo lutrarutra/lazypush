@@ -56,15 +56,9 @@ func (r *Repo) StagedCount() (int, error) {
 }
 
 func (r *Repo) StageAll() error {
-	status, err := r.worktree.Status()
+	_, err := r.worktree.Add(".")
 	if err != nil {
-		return err
-	}
-	for path := range status {
-		_, err := r.worktree.Add(path)
-		if err != nil {
-			return fmt.Errorf("stage %s: %w", path, err)
-		}
+		return fmt.Errorf("stage .: %w", err)
 	}
 	return nil
 }
@@ -232,7 +226,7 @@ func (r *Repo) Tag(name string) error {
 	}
 	_, err = r.repo.CreateTag(name, ref.Hash(), &gogit.CreateTagOptions{
 		Message: name,
-		Tagger: &sig,
+		Tagger:  &sig,
 	})
 	if err != nil {
 		return fmt.Errorf("create tag %s: %w", name, err)
