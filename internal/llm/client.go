@@ -31,14 +31,14 @@ type chatMessage struct {
 }
 
 type chatRequest struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
+	Model     string        `json:"model"`
+	Messages  []chatMessage `json:"messages"`
+	MaxTokens int           `json:"max_tokens,omitempty"`
 }
 
 type chatChoice struct {
 	Message      chatMessage `json:"message"`
-	FinishReason string     `json:"finish_reason"`
+	FinishReason string      `json:"finish_reason"`
 }
 
 type chatResponse struct {

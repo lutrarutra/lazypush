@@ -19,6 +19,7 @@ func newPRReviewScreen(description string) prReviewScreenModel {
 	ta.SetValue(description)
 	ta.SetWidth(80)
 	ta.SetHeight(15)
+	ta.CharLimit = 0
 	ta.ShowLineNumbers = false
 	ta.Prompt = ""
 	ta.Focus()

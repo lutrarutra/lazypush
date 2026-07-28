@@ -34,6 +34,7 @@ func newReviewScreenWithLLM(diff, commitMessage string, noLLM bool) reviewScreen
 	ta.SetValue(commitMessage)
 	ta.SetWidth(80)
 	ta.SetHeight(3)
+	ta.CharLimit = 0
 	ta.ShowLineNumbers = false
 	ta.Prompt = ""
 	ta.Focus()
