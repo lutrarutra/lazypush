@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -9,9 +10,18 @@ import (
 	"github.com/lutrarutra/lazypush/internal/version"
 )
 
+var (
+	green = lipgloss.NewStyle().Foreground(lipgloss.Color("114"))
+	red   = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))
+	faint = lipgloss.NewStyle().Faint(true)
+	bold  = lipgloss.NewStyle().Bold(true)
+)
+
 type versionScreenModel struct {
 	currentTag    string
 	choices       []string
+	labels        []string
+	bodies        []string
 	selected      int
 	customInput   textinput.Model
 	showCustom    bool
@@ -30,13 +40,17 @@ func newVersionScreen(currentTag string) versionScreenModel {
 		base = v
 	}
 
-	choices := []string{
-		fmt.Sprintf("Keep (%s)", currentTag),
-		fmt.Sprintf("Bump Patch (%s)", base.Bump(version.Patch).String()),
-		fmt.Sprintf("Bump Minor (%s)", base.Bump(version.Minor).String()),
-		fmt.Sprintf("Bump Major (%s)", base.Bump(version.Major).String()),
-		"Custom",
+	labels := []string{"Keep", "Patch", "Minor", "Major", "Custom"}
+	bodies := []string{
+		currentTag,
+		base.Bump(version.Patch).String(),
+		base.Bump(version.Minor).String(),
+		base.Bump(version.Major).String(),
+		"",
 	}
+
+	choices := make([]string, len(labels))
+	copy(choices, labels)
 
 	ci := textinput.New()
 	ci.Placeholder = "v0.0.0"
@@ -45,6 +59,8 @@ func newVersionScreen(currentTag string) versionScreenModel {
 	return versionScreenModel{
 		currentTag:  currentTag,
 		choices:     choices,
+		labels:      labels,
+		bodies:      bodies,
 		selected:    1,
 		customInput: ci,
 		showCustom:  false,
@@ -166,38 +182,97 @@ func (m versionScreenModel) View() string {
 	}
 
 	if m.confirmReTag {
-		var s string
-		s += lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("🏷️  Version: %s (existing tag)", m.chosenVersion)) + "\n\n"
-		s += fmt.Sprintf("Move existing tag %s to current commit? (y/N)\n", m.chosenVersion)
-		s += "\nEsc to go back\n"
-		return s
+		var s strings.Builder
+		s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220")).Render("⚠️  Tag Already Exists"))
+		s.WriteString("\n\n")
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Render("Version: "))
+		s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render(m.chosenVersion))
+		s.WriteString("\n\n")
+		s.WriteString("This tag already exists. ")
+		s.WriteString(bold.Render("Move it to the current commit?"))
+		s.WriteString("\n\n")
+		s.WriteString(green.Render("  y"))
+		s.WriteString("  Yes, move the tag\n")
+		s.WriteString(red.Render("  n"))
+		s.WriteString("  No, keep it where it is\n")
+		s.WriteString("\n")
+		s.WriteString(faint.Render("  Esc to go back"))
+		return s.String()
 	}
 
 	if m.confirmLLM {
-		var s string
-		s += lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("🏷️  Version: %s", m.chosenVersion)) + "\n\n"
-		s += "Generate commit message with LLM? (Y/n)\n"
-		s += "\nEsc to go back\n"
-		return s
+		var s strings.Builder
+		s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render("🤖  Generate Commit Message"))
+		s.WriteString("\n\n")
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Render("Version: "))
+		s.WriteString(bold.Render(m.chosenVersion))
+		s.WriteString("\n\n")
+		s.WriteString("Use an LLM to generate the commit message from the diff?")
+		s.WriteString("\n\n")
+		s.WriteString(green.Render("  Y"))
+		s.WriteString("  Yes, generate with AI\n")
+		s.WriteString(red.Render("  n"))
+		s.WriteString("  No, write it manually\n")
+		s.WriteString("\n")
+		s.WriteString(faint.Render("  Esc to go back"))
+		return s.String()
 	}
 
-	var s string
-	s += lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("🏷️  Current tag: %s", m.currentTag)) + "\n\n"
+	var s strings.Builder
+	s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render("🏷️  Select Tag (version)"))
+	s.WriteString("\n\n")
+	s.WriteString(lipgloss.NewStyle().Faint(true).Render(fmt.Sprintf("Current: %s\n\n", m.currentTag)))
 
 	if m.showCustom {
-		s += m.customInput.View()
-		s += "\n\nEnter to confirm, Esc to go back\n"
-		return s
+		s.WriteString(m.customInput.View())
+		s.WriteString("\n\n")
+		s.WriteString(green.Render("  Enter"))
+		s.WriteString(" confirm   ")
+		s.WriteString(red.Render("Esc"))
+		s.WriteString(" go back\n")
+		return s.String()
 	}
 
-	for i, choice := range m.choices {
+	labelColors := []lipgloss.Color{
+		lipgloss.Color("15"),  // keep   — white
+		lipgloss.Color("114"), // patch  — green
+		lipgloss.Color("220"), // minor  — yellow
+		lipgloss.Color("204"), // major  — red
+		lipgloss.Color("141"), // custom — purple
+	}
+	descriptions := []string{
+		"no version change",
+		"bug fixes / small changes",
+		"new features (backward-compat)",
+		"breaking changes",
+		"enter a custom version",
+	}
+
+	// s.WriteString(faint.Render("Select a version bump:\n\n"))
+
+	for i := range m.labels {
+		// Cursor (col 0-1) — use > which is exactly 1 cell wide
 		if i == m.selected {
-			s += "▸ " + choice + "\n"
+			s.WriteString("> ")
 		} else {
-			s += "  " + choice + "\n"
+			s.WriteString("  ")
 		}
-	}
 
-	s += "\n↑/↓ to navigate, Enter to select, Esc to cancel\n"
-	return s
+		// Build un-styled row text, then style the whole line
+		body := m.bodies[i]
+		if body != "" {
+			body = "> " + body
+		}
+		row := fmt.Sprintf("%-7s  %-16s  . %s", m.labels[i], body, descriptions[i])
+
+		if i == m.selected {
+			s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39")).Render(row))
+		} else {
+			s.WriteString(lipgloss.NewStyle().Foreground(labelColors[i]).Render(row))
+		}
+		s.WriteString("\n")
+	}
+	s.WriteString("\n")
+	s.WriteString(lipgloss.NewStyle().Faint(true).Render("  ↑/↓ navigate • Enter select • Esc quit"))
+	return s.String()
 }

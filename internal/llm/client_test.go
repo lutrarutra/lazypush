@@ -76,7 +76,7 @@ func TestCommitMessagePrompt(t *testing.T) {
 
 func TestPRDescriptionPrompt(t *testing.T) {
 	diff := "--- a/foo.go\n+++ b/foo.go\n@@ -1 +1 @@\n-func old()\n+func new()"
-	sys, user := llm.PRDescriptionPrompt(diff)
+	sys, user := llm.PRDescriptionPrompt(diff, "main")
 	if sys == "" {
 		t.Error("system prompt is empty")
 	}

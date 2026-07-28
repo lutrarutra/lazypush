@@ -11,7 +11,7 @@ func CheckInstalled() bool {
 	return err == nil
 }
 
-func CreatePR(title, body string) (string, error) {
+func CreatePR(title, body, baseBranch, headBranch string) (string, error) {
 	if !CheckInstalled() {
 		return "", fmt.Errorf("gh CLI not found; install it from https://cli.github.com")
 	}
@@ -19,6 +19,8 @@ func CreatePR(title, body string) (string, error) {
 	cmd := exec.Command("gh", "pr", "create",
 		"--title", title,
 		"--body", body,
+		"--base", baseBranch,
+		"--head", headBranch,
 	)
 
 	var stdout, stderr bytes.Buffer

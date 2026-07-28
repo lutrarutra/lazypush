@@ -13,14 +13,16 @@ type reviewScreenModel struct {
 	diff          string
 	commitMessage textarea.Model
 	viewport      viewport.Model
-	showPR        bool
-	prDescription textarea.Model
 	confirmed     bool
 	cancelled     bool
-	includePR     bool
+	noLLM         bool
 }
 
 func newReviewScreen(diff, commitMessage string) reviewScreenModel {
+	return newReviewScreenWithLLM(diff, commitMessage, false)
+}
+
+func newReviewScreenWithLLM(diff, commitMessage string, noLLM bool) reviewScreenModel {
 	vp := viewport.New(80, 10)
 	if diff == "" {
 		vp.SetContent(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("(no changes detected)"))
@@ -32,22 +34,16 @@ func newReviewScreen(diff, commitMessage string) reviewScreenModel {
 	ta.SetValue(commitMessage)
 	ta.SetWidth(80)
 	ta.SetHeight(3)
+	ta.CharLimit = 0
 	ta.ShowLineNumbers = false
 	ta.Prompt = ""
 	ta.Focus()
-
-	pr := textarea.New()
-	pr.SetValue(commitMessage)
-	pr.SetWidth(80)
-	pr.SetHeight(5)
-	pr.ShowLineNumbers = false
-	pr.Prompt = ""
 
 	return reviewScreenModel{
 		diff:          diff,
 		commitMessage: ta,
 		viewport:      vp,
-		prDescription: pr,
+		noLLM:         noLLM,
 	}
 }
 
@@ -61,28 +57,9 @@ func (m reviewScreenModel) Update(msg tea.Msg) (reviewScreenModel, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+s":
 			m.confirmed = true
-			m.includePR = false
 			return m, nil
-		case "ctrl+p":
-			m.confirmed = true
-			m.includePR = true
-			return m, nil
-		case "ctrl+c":
+		case "esc":
 			m.cancelled = true
-			return m, nil
-		case "ctrl+e":
-			m.showPR = !m.showPR
-			return m, nil
-		case "tab":
-			if m.showPR {
-				if m.commitMessage.Focused() {
-					m.commitMessage.Blur()
-					m.prDescription.Focus()
-				} else {
-					m.prDescription.Blur()
-					m.commitMessage.Focus()
-				}
-			}
 			return m, nil
 		}
 	}
@@ -90,8 +67,6 @@ func (m reviewScreenModel) Update(msg tea.Msg) (reviewScreenModel, tea.Cmd) {
 	var cmd tea.Cmd
 	if m.commitMessage.Focused() {
 		m.commitMessage, cmd = m.commitMessage.Update(msg)
-	} else if m.showPR && m.prDescription.Focused() {
-		m.prDescription, cmd = m.prDescription.Update(msg)
 	}
 	return m, cmd
 }
@@ -101,6 +76,13 @@ func (m reviewScreenModel) View() string {
 
 	s.WriteString(lipgloss.NewStyle().Bold(true).Render("📝 Review Changes"))
 	s.WriteString("\n\n")
+
+	if m.noLLM {
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("  ⚠ No AI provider configured — write your commit message manually"))
+		s.WriteString("\n")
+		s.WriteString(lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("240")).Render("     Run 'lazypush login' to set up an AI provider"))
+		s.WriteString("\n\n")
+	}
 
 	s.WriteString(lipgloss.NewStyle().Bold(true).Render("Diff:"))
 	s.WriteString("\n")
@@ -112,17 +94,12 @@ func (m reviewScreenModel) View() string {
 	s.WriteString(m.commitMessage.View())
 	s.WriteString("\n")
 
-	if m.showPR {
-		s.WriteString(lipgloss.NewStyle().Bold(true).Render("PR Description:"))
-		s.WriteString("\n")
-		s.WriteString(m.prDescription.View())
-		s.WriteString("\n")
-	}
-
 	s.WriteString("\n")
-	s.WriteString(lipgloss.NewStyle().Faint(true).Render("Ctrl+s: Commit  Ctrl+p: Commit + PR  Ctrl+e: Toggle PR  Ctrl+c: Cancel  Tab: switch fields"))
+	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render("Ctrl+s"))
+	s.WriteString(lipgloss.NewStyle().Faint(true).Render(" Save commit message"))
+	s.WriteString("  ")
+	s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("204")).Render("Esc"))
+	s.WriteString(lipgloss.NewStyle().Faint(true).Render(" Cancel"))
 
 	return s.String()
 }
-
-
