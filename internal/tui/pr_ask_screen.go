@@ -17,11 +17,12 @@ const (
 )
 
 type prAskScreenModel struct {
-	choices   []string
-	selected  int
-	choice    prChoice
-	confirmed bool
-	cancelled bool
+	choices       []string
+	currentBranch string
+	selected      int
+	choice        prChoice
+	confirmed     bool
+	cancelled     bool
 }
 
 func newPRAskScreen(currentBranch string, hasDiff bool) prAskScreenModel {
@@ -29,23 +30,26 @@ func newPRAskScreen(currentBranch string, hasDiff bool) prAskScreenModel {
 		"Create PR to another branch",
 	}
 	if hasDiff {
-		choices = append(choices, "Push to new branch", "Commit to current branch")
+		choices = append(choices, "Push to new branch", fmt.Sprintf("Commit to %s", currentBranch))
 	}
 	if currentBranch == "main" || currentBranch == "master" {
 		if !hasDiff {
 			return prAskScreenModel{
-				choices:  choices,
-				selected: 0, // only option
+				choices:       choices,
+				selected:      0,
+				currentBranch: currentBranch,
 			}
 		}
 		return prAskScreenModel{
-			choices:  choices[1:],
-			selected: 1, // Commit to current
+			choices:       choices[1:],
+			selected:      1,
+			currentBranch: currentBranch,
 		}
 	}
 	return prAskScreenModel{
-		choices:  choices,
-		selected: len(choices) - 1, // last option (Commit) is default
+		choices:       choices,
+		selected:      len(choices) - 1,
+		currentBranch: currentBranch,
 	}
 }
 

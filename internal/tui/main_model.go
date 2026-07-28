@@ -166,6 +166,15 @@ func (m *Model) initVersionScreen() tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Ctrl+C / Ctrl+D exits immediately from anywhere
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "ctrl+d":
+			return m, tea.Quit
+		}
+	}
+
 	switch m.screen {
 	case screenLogin:
 		return m.updateLogin(msg)

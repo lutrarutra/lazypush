@@ -31,8 +31,9 @@ type chatMessage struct {
 }
 
 type chatRequest struct {
-	Model    string        `json:"model"`
-	Messages []chatMessage `json:"messages"`
+	Model       string        `json:"model"`
+	Messages    []chatMessage `json:"messages"`
+	MaxTokens   int           `json:"max_tokens,omitempty"`
 }
 
 type chatChoice struct {
@@ -45,7 +46,8 @@ type chatResponse struct {
 
 func (c *Client) Generate(ctx context.Context, system, user string) (string, error) {
 	req := chatRequest{
-		Model: c.model,
+		Model:     c.model,
+		MaxTokens: 4096,
 		Messages: []chatMessage{
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
