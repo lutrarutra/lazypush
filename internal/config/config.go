@@ -73,3 +73,18 @@ func Save(cfg *Config) error {
 	}
 	return os.WriteFile(path, data, 0600)
 }
+
+// Exists returns true if config file exists.
+func Exists() bool {
+	_, err := os.Stat(ConfigPath())
+	return err == nil
+}
+
+// Delete removes the config file.
+func Delete() error {
+	path := ConfigPath()
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	return os.Remove(path)
+}

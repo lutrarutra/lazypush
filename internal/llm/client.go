@@ -90,3 +90,38 @@ func (c *Client) Generate(ctx context.Context, system, user string) (string, err
 
 	return chatResp.Choices[0].Message.Content, nil
 }
+
+// Ping sends a minimal request to verify the API is reachable and the key is valid.
+func (c *Client) Ping(ctx context.Context) error {
+	req := chatRequest{
+		Model: c.model,
+		Messages: []chatMessage{
+			{Role: "user", Content: "respond with exactly one word: ok"},
+		},
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("connection failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}

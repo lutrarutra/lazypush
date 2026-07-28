@@ -55,12 +55,13 @@ type Model struct {
 	prURL          string
 	includePR      bool
 	hasDiff        bool
+	forceLogin     bool
 	newBranchName  string
 	newBranchInput textinput.Model
 	err            error
 }
 
-func NewModel() *Model {
+func NewModel(forceLogin bool) *Model {
 	nb := textinput.New()
 	nb.Placeholder = "feature/my-new-feature"
 	nb.Prompt = "Branch name: "
@@ -72,6 +73,8 @@ func NewModel() *Model {
 		login:          newLoginScreen(),
 		newBranchName:  "",
 		newBranchInput: nb,
+		review:         newReviewScreen("", ""),
+		forceLogin:     forceLogin,
 	}
 }
 
@@ -85,6 +88,12 @@ func (m *Model) Init() tea.Cmd {
 		}
 	}
 
+	// forceLogin was requested via 'lazypush login' subcommand
+	if m.forceLogin {
+		m.config = cfg
+		return m.login.Init()
+	}
+
 	cwd, _ := os.Getwd()
 	repo, err := git.Open(cwd)
 	if err != nil {
@@ -95,7 +104,7 @@ func (m *Model) Init() tea.Cmd {
 	m.config = cfg
 	m.repo = repo
 
-	// Check for diff early to decide if we need version/review steps
+	// Check for diff early
 	if repo != nil {
 		diff, err := repo.Diff()
 		if err == nil {
@@ -103,19 +112,43 @@ func (m *Model) Init() tea.Cmd {
 		}
 	}
 
+	// If API key is present, set up the LLM client
 	if cfg.APIKey != "" && cfg.APIURL != "" && cfg.Model != "" {
 		m.llmClient = llm.New(cfg.APIURL, cfg.APIKey, cfg.Model)
-		if !m.hasDiff {
-			// No changes — skip version screen, go straight to PR flow
-			m.loading = newLoadingScreen("Checking branch...")
-			m.screen = screenLoading
-			return m.afterReviewConfirmed()
-		}
-		m.screen = screenVersion
-		return m.initVersionScreen()
 	}
 
-	return m.login.Init()
+	if !m.hasDiff && m.llmClient != nil {
+		// No changes with LLM — skip version screen, go straight to PR flow
+		m.loading = newLoadingScreen("Checking branch...")
+		m.screen = screenLoading
+		return m.loadingCmd(m.afterReviewConfirmed())
+	}
+
+	// If no API key, show a brief notice then proceed to version screen
+	// (user will write commit message manually, can run 'lazypush login' later)
+	m.screen = screenVersion
+	return m.initVersionScreen()
+}
+
+func (m *Model) initVersionScreenNoLLM() tea.Cmd {
+	tag := "v0.0.0"
+	if m.repo != nil {
+		latest, err := m.repo.LatestTag()
+		if err == nil && latest != "" {
+			tag = latest
+		}
+	}
+	m.versionTag = tag
+	m.version = newVersionScreen(tag)
+	m.version.useLLM = false
+	m.version.done = true
+	m.screen = screenReview
+	diff, err := m.repo.Diff()
+	if err != nil {
+		diff = ""
+	}
+	m.review = newReviewScreenWithLLM(diff, "", true)
+	return nil
 }
 
 func (m *Model) initVersionScreen() tea.Cmd {
@@ -166,9 +199,12 @@ func (m *Model) updatePRAsk(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.revertToReview()
 	}
 	if m.prAsk.confirmed {
+		m.prAsk.confirmed = false
 		switch m.prAsk.choice {
 		case prChoiceCreate:
-			return m, m.afterPRAskCreate()
+			m.loading = newLoadingScreen("Fetching branches...")
+			m.screen = screenLoading
+			return m, m.loadingCmd(m.afterPRAskCreate())
 		case prChoiceBranchOut:
 			m.screen = screenNewBranch
 			m.newBranchName = ""
@@ -189,16 +225,21 @@ func (m *Model) afterPRAskCreate() tea.Cmd {
 		if err != nil {
 			return errMsg{err: fmt.Sprintf("list branches: %v", err)}
 		}
-		m.branchSel = newBranchSelectScreen(branches, m.currentBranch)
-		m.screen = screenBranchSelect
-		return nil
+		return branchListReadyMsg{branches: branches}
 	}
 }
 
 func (m *Model) revertToReview() tea.Cmd {
-	m.review.cancelled = false
-	m.review.confirmed = false
-	m.screen = screenReview
+	if m.hasDiff {
+		m.review.cancelled = false
+		m.review.confirmed = false
+		m.screen = screenReview
+	} else {
+		// No diff — review screen was never shown, go to PR flow
+		m.loading = newLoadingScreen("Checking branch...")
+		m.screen = screenLoading
+		return m.loadingCmd(m.afterReviewConfirmed())
+	}
 	return nil
 }
 
@@ -248,7 +289,7 @@ func (m *Model) updateBranchSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.targetBranch = m.branchSel.branches[m.branchSel.selected]
 		m.loading = newLoadingScreen("Generating PR description...")
 		m.screen = screenLoading
-		return m, m.generatePRDescription()
+		return m, m.loadingCmd(m.generatePRDescription())
 	}
 	return m, cmd
 }
@@ -279,9 +320,13 @@ func (m *Model) generatePRDescription() tea.Cmd {
 		if err != nil {
 			return errMsg{err: fmt.Sprintf("diff to %s: %v", m.targetBranch, err)}
 		}
-		if diff == "" {
-			return prDescriptionReadyMsg{description: "No changes detected between branches."}
+		if diff == "" && m.llmClient != nil {
+			return prDescriptionReadyMsg{description: ""}
 		}
+		if m.llmClient == nil {
+			return prDescriptionReadyMsg{description: ""}
+		}
+
 		sys, user := llm.PRDescriptionPrompt(diff, m.targetBranch)
 		desc, err := m.llmClient.Generate(context.Background(), sys, user)
 		if err != nil {
@@ -310,11 +355,33 @@ func (m *Model) updateLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.login, cmd = m.login.Update(msg)
 
 	if m.login.done {
+		apiURL, model, apiKey := m.login.Values()
+
+		if m.login.err == "cancelled" {
+			// If we were forced to login, just exit
+			if m.forceLogin {
+				return m, tea.Quit
+			}
+			// User skipped login — proceed without LLM
+			cwd, _ := os.Getwd()
+			repo, err := git.Open(cwd)
+			if err == nil {
+				m.repo = repo
+				diff, err := repo.Diff()
+				if err == nil {
+					m.hasDiff = diff != ""
+				}
+			}
+			if m.hasDiff {
+				return m, m.initVersionScreenNoLLM()
+			}
+			// No diff and no LLM — nothing to do
+			return m, tea.Quit
+		}
 		if m.login.err != "" {
 			return m, tea.Quit
 		}
 
-		apiURL, model, apiKey := m.login.Values()
 		m.config.APIURL = apiURL
 		m.config.Model = model
 		m.config.APIKey = apiKey
@@ -325,10 +392,19 @@ func (m *Model) updateLogin(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.llmClient = llm.New(apiURL, apiKey, model)
+
+		// Re-check diff now that we have a repo
+		if m.repo != nil {
+			diff, err := m.repo.Diff()
+			if err == nil {
+				m.hasDiff = diff != ""
+			}
+		}
+
 		if !m.hasDiff {
 			m.loading = newLoadingScreen("Checking branch...")
 			m.screen = screenLoading
-			return m, m.afterReviewConfirmed()
+			return m, m.loadingCmd(m.afterReviewConfirmed())
 		}
 		return m, m.initVersionScreen()
 	}
@@ -346,10 +422,22 @@ func (m *Model) updateVersion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.versionTag = m.version.chosenVersion
 
+		// If no LLM client, skip LLM generation and go straight to manual review
+		if m.llmClient == nil {
+			diff, err := m.repo.Diff()
+			if err != nil {
+				diff = ""
+			}
+			m.hasDiff = diff != ""
+			m.review = newReviewScreenWithLLM(diff, "", true)
+			m.screen = screenReview
+			return m, nil
+		}
+
 		if m.version.useLLM {
 			m.loading = newLoadingScreen("Generating commit message...")
 			m.screen = screenLoading
-			return m, m.generateCommitMessage()
+			return m, m.loadingCmd(m.generateCommitMessage())
 		}
 
 		// Write manually — go to review with an empty message
@@ -366,7 +454,7 @@ func (m *Model) updateVersion(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// No changes — skip review, go straight to branch check / PR flow
 		m.loading = newLoadingScreen("Checking branch...")
 		m.screen = screenLoading
-		return m, m.afterReviewConfirmed()
+		return m, m.loadingCmd(m.afterReviewConfirmed())
 	}
 
 	return m, cmd
@@ -390,6 +478,10 @@ func (m *Model) updateLoading(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.prAsk = newPRAskScreen(msg.branch, m.hasDiff)
 		m.screen = screenPRAsk
 		return m, nil
+	case branchListReadyMsg:
+		m.branchSel = newBranchSelectScreen(msg.branches, m.currentBranch)
+		m.screen = screenBranchSelect
+		return m, nil
 	case errMsg:
 		m.err = fmt.Errorf("%s", msg.err)
 		return m, tea.Quit
@@ -398,6 +490,10 @@ func (m *Model) updateLoading(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.loading, cmd = m.loading.Update(msg)
 	return m, cmd
+}
+
+func (m *Model) loadingCmd(workCmd tea.Cmd) tea.Cmd {
+	return tea.Batch(m.loading.Init(), workCmd)
 }
 
 func (m *Model) generateCommitMessage() tea.Cmd {
@@ -435,7 +531,7 @@ func (m *Model) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.review.confirmed = false
 		m.loading = newLoadingScreen("Checking branch...")
 		m.screen = screenLoading
-		return m, m.afterReviewConfirmed()
+		return m, m.loadingCmd(m.afterReviewConfirmed())
 	}
 	if m.review.cancelled {
 		return m, tea.Quit
@@ -610,6 +706,10 @@ type noDiffReadyMsg struct{}
 type branchCheckedMsg struct {
 	branch string
 	onMain bool
+}
+
+type branchListReadyMsg struct {
+	branches []string
 }
 
 type prDescriptionReadyMsg struct {

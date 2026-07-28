@@ -15,9 +15,14 @@ type reviewScreenModel struct {
 	viewport      viewport.Model
 	confirmed     bool
 	cancelled     bool
+	noLLM         bool
 }
 
 func newReviewScreen(diff, commitMessage string) reviewScreenModel {
+	return newReviewScreenWithLLM(diff, commitMessage, false)
+}
+
+func newReviewScreenWithLLM(diff, commitMessage string, noLLM bool) reviewScreenModel {
 	vp := viewport.New(80, 10)
 	if diff == "" {
 		vp.SetContent(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("(no changes detected)"))
@@ -37,6 +42,7 @@ func newReviewScreen(diff, commitMessage string) reviewScreenModel {
 		diff:          diff,
 		commitMessage: ta,
 		viewport:      vp,
+		noLLM:         noLLM,
 	}
 }
 
@@ -69,6 +75,13 @@ func (m reviewScreenModel) View() string {
 
 	s.WriteString(lipgloss.NewStyle().Bold(true).Render("📝 Review Changes"))
 	s.WriteString("\n\n")
+
+	if m.noLLM {
+		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("  ⚠ No AI provider configured — write your commit message manually"))
+		s.WriteString("\n")
+		s.WriteString(lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("240")).Render("     Run 'lazypush login' to set up an AI provider"))
+		s.WriteString("\n\n")
+	}
 
 	s.WriteString(lipgloss.NewStyle().Bold(true).Render("Diff:"))
 	s.WriteString("\n")
