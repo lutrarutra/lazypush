@@ -674,6 +674,22 @@ func (m *Model) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m *Model) loadingLabelMatch(stepLabel string) bool {
+	// When on the loading screen, match based on the label text
+	label := m.loading.label
+	switch {
+	case stepLabel == "💬  Commit" && label == "Generating commit message...":
+		return true
+	case stepLabel == "📝  PR" && label == "Generating PR description...":
+		return true
+	case stepLabel == "🎯  Branch" && label == "Fetching branches...":
+		return true
+	case stepLabel == "🔀  Next" && (label == "Checking branch..." || label == "Fetching branches..."):
+		return true
+	}
+	return false
+}
+
 func (m *Model) workflowLine() string {
 	steps := []struct {
 		screen screen
@@ -694,7 +710,7 @@ func (m *Model) workflowLine() string {
 		if i > 0 {
 			s.WriteString("  ")
 		}
-		if step.screen == m.screen {
+		if step.screen == m.screen || (m.screen == screenLoading && m.loadingLabelMatch(step.label)) {
 			s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("236")).Background(lipgloss.Color("39")).Render(" " + step.label + " "))
 		} else if m.isWorkflowStepCompleted(i) {
 			s.WriteString(lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("114")).Render(step.label))
