@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -43,12 +44,19 @@ type chatChoice struct {
 
 type chatResponse struct {
 	Choices []chatChoice `json:"choices"`
+	Usage   *usageInfo   `json:"usage,omitempty"`
+}
+
+type usageInfo struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
 }
 
 func (c *Client) Generate(ctx context.Context, system, user string) (string, error) {
 	req := chatRequest{
 		Model:     c.model,
-		MaxTokens: 16384,
+		MaxTokens: 32768,
 		Messages: []chatMessage{
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
@@ -91,7 +99,19 @@ func (c *Client) Generate(ctx context.Context, system, user string) (string, err
 		return "", fmt.Errorf("API returned no choices")
 	}
 
-	return chatResp.Choices[0].Message.Content, nil
+	content := chatResp.Choices[0].Message.Content
+
+	if chatResp.Usage != nil {
+		log.Printf("📊 tokens: ↑%d in → ↓%d out (total %d)",
+			chatResp.Usage.PromptTokens,
+			chatResp.Usage.CompletionTokens,
+			chatResp.Usage.TotalTokens,
+		)
+	} else {
+		log.Printf("📊 output length: %d chars", len(content))
+	}
+
+	return content, nil
 }
 
 // Ping sends a minimal request to verify the API is reachable and the key is valid.
