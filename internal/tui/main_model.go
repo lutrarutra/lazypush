@@ -621,6 +621,11 @@ func (m *Model) execStep(displayIdx int) tea.Cmd {
 		case 2:
 			if m.hasDiff && m.needsTagging() {
 				err = m.repo.Push("origin")
+				if err == nil && m.version.reTag {
+					// Tag was moved to HEAD — a regular push skips tags that
+					// already exist on the remote, so force-push it there.
+					err = m.repo.ForcePushTag(m.versionTag)
+				}
 			} else {
 				err = m.createPR()
 			}

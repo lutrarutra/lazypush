@@ -263,6 +263,23 @@ func (r *Repo) Push(remote string) error {
 	return nil
 }
 
+// ForcePushTag force-pushes the given tag to origin, overwriting any existing
+// remote tag with the same name. Required when a tag is moved to a new commit:
+// a regular push (even with --follow-tags) skips tags that already exist on the
+// remote, so the moved tag would otherwise stay local only.
+func (r *Repo) ForcePushTag(name string) error {
+	cmd := exec.Command("git", "push", "--force", "origin", "tag", name)
+	cmd.Dir = r.path
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("force push tag %s: %w\n%s", name, err, stderr.String())
+	}
+	return nil
+}
+
 func (r *Repo) Path() string {
 	return r.path
 }

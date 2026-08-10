@@ -112,7 +112,7 @@ func (m confirmScreenModel) View() string {
 		if m.isBump {
 			tagOp = fmt.Sprintf("  ● Tag %s → %s", m.oldTag, m.versionTag)
 		} else {
-			tagOp = fmt.Sprintf("  ● Tag %s (re-tag)", m.versionTag)
+			tagOp = fmt.Sprintf("  ● Tag %s → origin (re-tag, force push)", m.versionTag)
 		}
 		s.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render(tagOp))
 		s.WriteString("\n")
